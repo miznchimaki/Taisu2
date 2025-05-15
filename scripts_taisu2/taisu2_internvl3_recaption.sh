@@ -1,19 +1,26 @@
 #!/usr/bin/bash
 
-# turn on execution trace mode
-set -x
 
-OUTPUT_DIR='work_dirs/finetune_internvit6b_224to336_vicuna7b'
-GPUS=${GPUS:-8}
-NNODES=${NNODES:-1}
-NODE_RANK=${NODE_RANK:-0}
-PORT=${PORT:-29500}
+# turn off the execution trace mode
+set +x
 
-# if [ ! -d "$OUTPUT_DIR" ]; then
-#   mkdir -p "$OUTPUT_DIR"
-# fi
+HOST_FILE=${1:-"$HOME/projects/Taisu2/scripts_taisu2/multinode_hostfile"}
+MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
+NNODES=$(cat $HOST_FILE | wc -l)
+NODE_RANK=${3:-0}
+MIN_PORT=${3:-23333}
+MAX_PORT=${4:-45678}
+PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
+MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
 
-# echo "Begin running..."
+echo "multi-node deepspeed host file: ${HOST_FILE}"
+echo "total multi-node number: ${NNODES}"
+echo "current node rank index: ${NODE_RANK}"
+echo "master node address: ${MASTER_ADDR}"
+echo "communication port of master node: ${MASTER_PORT}"
+
+start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
+echo "Begin Taisu2 image-alttext pairs recaptioning at ${start_time_stamp}"
 # torchrun --nnodes=${NNODES} --nproc_per_node=${GPUS} --master_port=${PORT} \
 #     llava/train/train_mem.py \
 #     --deepspeed ./scripts/zero3.json \
@@ -51,3 +58,6 @@ PORT=${PORT:-29500}
 #     --lazy_preprocess True \
 #     --report_to "tensorboard" \
 #     | tee ${OUTPUT_DIR}/train.log
+
+end_time_stamp=`date +"%Y-%m-%d-%H:%M:%S"`
+echo "End Taisu2 image-alttext pairs recaptioning at ${end_time_stamp}"
