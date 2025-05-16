@@ -4,7 +4,7 @@
 # turn off the execution trace mode
 set +x
 
-HOST_FILE=${1:-"$HOME/projects/Taisu2/scripts_taisu2/multinode_hostfile"}
+HOST_FILE=${1:-"$HOME/projects/Taisu2/scripts/multinode_hostfile"}
 MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
 NNODES=$(cat $HOST_FILE | wc -l)
 NODE_RANK=${3:-0}
@@ -32,54 +32,54 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           ./taisu2/llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
           --model_name_or_path $HOME/ckpts/InternVL3-2B \
           --version internvl3 \
-          --freeze_backbone False \
-          --tune_mm_mlp_adapter False \
-          --tune_vit_pos_embedding True \
-          --vision_tower None \
+          --freeze_backbone false \
+          --tune_mm_mlp_adapter false \
+          --tune_vit_pos_embedding true \
+          --vision_tower "" \
           --mm_vision_select_layer -1 \
-          --pretrain_mm_mlp_adapter None \
+          --pretrain_mm_mlp_adapter "" \
           --mm_projector_type linear \
-          --mm_use_im_start_end False \
-          --mm_use_im_patch_token False \
+          --mm_use_im_start_end false \
+          --mm_use_im_patch_token false \
           --mm_vision_select_feature patch \
-          --data_path None \
-          --lazy_preprocess True \
-          --is_multimodal True \
-          --image_folder None \
+          --data_path "" \
+          --lazy_preprocess true \
+          --is_multimodal true \
+          --image_folder "" \
           --image_aspect_ratio pad \
-          --image_grid_pinpoints None \
-          --dynamic_resolution True \
+          --image_grid_pinpoints "" \
+          --dynamic_resolution true \
           --base_img_size 448 \
           --min_subimg_num 1 \
           --max_subimg_num 12 \
-          --use_thumbnail True \
-          --padding False \
+          --use_thumbnail true \
+          --padding do_not_pad \
           --padding_side right \
-          --return_tensors None \
-          --return_attention_mask False \
+          --return_tensors "" \
+          --return_attention_mask false \
           --wds_shards_folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
           --wds_shards_subfolder rename_and_rearchive \
-          --wds_nsamples_per_epoch None \
-          --wds_last_batch True \
+          --wds_nsamples_per_epoch 0 \
+          --wds_last_batch true \
           --wds_shuffle_seed 42 \
-          --txts_separator \\n \
-          --cache_dir None \
+          --txts_separator "\n" \
+          --cache_dir "" \
           --optim adamw_torch \
-          --remove_unused_columns False \
-          --freeze_mm_mlp_adapter False \
-          --freeze_llm False \
+          --remove_unused_columns false \
+          --freeze_mm_mlp_adapter false \
+          --freeze_llm false \
           --mpt_attn_impl trition \
           --model_max_length 12288 \
-          --double_quant True \
+          --double_quant true \
           --quant_type nf4 \
           --bits 16 \
-          --lora_enable False \
+          --lora_enable false \
           --lora_r 64 \
           --lora_alpha 16 \
           --lora_dropout 0.05 \
-          --lora_weight_path None \
+          --lora_weight_path "" \
           --lora_bias none \
-          --group_by_modality_length False \
+          --group_by_modality_length false \
 
-end_time_stamp=`date +"%Y-%m-%d-%H:%M:%S"`
+end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
 echo "End Taisu2 image-alttext pairs recaption train at ${end_time_stamp}"

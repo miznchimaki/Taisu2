@@ -70,8 +70,7 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    data_path: str = field(default=None,
-                           metadata={"help": "Path to the training data."})
+    data_path: str = field(default=None, metadata={"help": "Path to the training data."})
     lazy_preprocess: bool = False
     is_multimodal: bool = False
     image_folder: Optional[str] = field(default=None)
@@ -84,10 +83,10 @@ class DataArguments:
     max_subimg_num: Optional[int] = field(default=12)
     use_thumbnail: Optional[bool] = field(default=True)
     # data arguments for tokenizer
-    padding: Optional[str | bool] = field(default=False)
-    padding_side: Optional[str | None] = field(default=None)
-    return_tensors: Optional[str | None] = field(default=None)
-    return_attention_mask: Optional[bool | None] = field(default=None)
+    padding: Optional[str] = field(default="do_not_pad")
+    padding_side: Optional[str] = field(default=None)
+    return_tensors: Optional[str] = field(default=None)
+    return_attention_mask: Optional[bool] = field(default=None)
     # data arguments for webdataset
     wds_shards_folder: Optional[str] = field(default=None)
     wds_shards_subfolder: Optional[str] = field(default="rename_and_rearchive")
@@ -127,7 +126,7 @@ class TrainingArguments(transformers.TrainingArguments):
     )
     lora_enable: bool = field(default=False)
     lora_r: int = field(default=64)
-    lora_alpha: int = field(defualt=16)
+    lora_alpha: int = field(default=16)
     lora_dropout: float = field(default=0.05)
     lora_weight_path: str = field(default=None)
     lora_bias: Literal["none", "all", "lora_only"] = "none"
@@ -734,9 +733,11 @@ def preprocess(
 class LazySupervisedDataset(Dataset):
     """Dataset for supervised fine-tuning."""
 
-    def __init__(self, data_path: str,
+    def __init__(
+                 self, data_path: str,
                  tokenizer: transformers.PreTrainedTokenizer,
-                 data_args: DataArguments):
+                 data_args: DataArguments
+                ):
         super(LazySupervisedDataset, self).__init__()
         list_data_dict = json.load(open(data_path, "r"))
 
@@ -889,8 +890,10 @@ class DataCollatorForSupervisedDataset(object):
         return batch
 
 
-def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
-                                data_args) -> Dict:
+def make_supervised_data_module(
+                                tokenizer: transformers.PreTrainedTokenizer,
+                                data_args
+                               ) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = LazySupervisedDataset(
                                           tokenizer=tokenizer,
@@ -945,7 +948,10 @@ class DataCollatorForWebDataset(object):
                            )
 
 
-def make_wds_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args: DataArguments = None) -> Dict:
+def make_wds_data_module(
+                         tokenizer: transformers.PreTrainedTokenizer, 
+                         data_args: DataArguments = None
+                        ) -> Dict:
     """Make training and evaluation webdataset iterable for pretraining & supervised fine-tuning"""
     data_root_dir = pathlib.Path(os.getenv("HOME", "")) / "datasets" / "Taisu2_datasets"
     wds_shards_p = data_root_dir / f"{data_args.wds_shards_folder}" / f"{data_args.wds_shards_subfolder}" / "image-text-pairs"
@@ -987,6 +993,17 @@ def train(attn_implementation=None):
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # params check
+    if data_args.return_tensors == "":
+        data_args.return_tensors = None
+    if data_args.txts_separator == "\\n":
+        data_args.txt_separator = "\n"
+    if training_args.cache_dir == "":
+        training_args.cache_dir = None
+    if training_args.lora_weight_path == "":
+        training_args.lora_weight_path = None
+
     local_rank = training_args.local_rank
     training_args._frozen = False  # compatible with transformers==4.32.0
     data_args._frozen = False  # compatible with transformers==4.32.0
@@ -1015,7 +1032,7 @@ def train(attn_implementation=None):
             )
         ))
 
-    if model_args.vision_tower is not None:
+    if model_args.vision_tower:
         if 'mpt' in model_args.model_name_or_path:
             config = transformers.AutoConfig.from_pretrained(model_args.model_name_or_path, trust_remote_code=True)
             config.attn_config['attn_impl'] = training_args.mpt_attn_impl
@@ -1105,9 +1122,12 @@ def train(attn_implementation=None):
         )
     elif internvl_flag:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-                                                               model_args.model_name_or_path, cache_dir=training_args.cache_dir, 
-                                                               model_max_length=training_args.model_max_length, padding_side="right", 
-                                                               trust_remote_code=True, use_fast=False
+                                                               model_args.model_name_or_path, 
+                                                               cache_dir=training_args.cache_dir, 
+                                                               model_max_length=training_args.model_max_length, 
+                                                               padding_side="right", 
+                                                               trust_remote_code=True, 
+                                                               use_fast=False
                                                               )
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -1135,7 +1155,7 @@ def train(attn_implementation=None):
         else:
             conversation_lib.default_conversation = conversation_lib.conv_templates["internvl2_5"]
 
-    if model_args.vision_tower is not None:
+    if model_args.vision_tower:
         model.get_model().initialize_vision_modules(
             model_args=model_args,
             fsdp=training_args.fsdp
@@ -1225,7 +1245,7 @@ def train(attn_implementation=None):
                     if training_args.bf16 and module.weight.dtype == torch.float32:
                         module = module.to(torch.bfloat16)
 
-    if data_args.wds_shards_folder is not None:
+    if data_args.wds_shards_folder:
         data_module = make_wds_data_module(
                                            tokenizer=tokenizer, 
                                            data_args=data_args
