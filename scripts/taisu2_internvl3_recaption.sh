@@ -21,6 +21,7 @@ echo "communication port of master node: ${MASTER_PORT}"
 printf "\n"
 
 
+conda activate xiaobao12
 cd $HOME/projects/Taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption train at ${start_time_stamp}"
