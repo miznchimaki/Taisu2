@@ -30,8 +30,8 @@ import transformers
 import webdataset as wds
 from llava.multifile_tariterators import tarfile_to_samples
 
-from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-from llava.constants import SHARD_SHUFFLE_SIZE, SHARD_SHUFFLE_INITIAL, SAMPLE_SHUFFLE_SIZE, SAMPLE_SHUFFLE_INITIAL
+from llava.constants import IGNORE_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL, SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
 from torch.utils.data import Dataset
 from llava.train.llava_trainer import LLaVATrainer
 
@@ -958,20 +958,20 @@ def make_wds_data_module(
     if not wds_shards_p.exists():
         raise FileNotFoundError(f"sharded tar files directory - {wds_shards_p}, does not exist!")
 
-    def get_first_and_last_tarnames() -> List[str, str]:
+    def get_first_and_last_tarnames() -> List[str]:
         tar_names = sorted(os.listdir(wds_shards_p))
         return (tar_names[0].split(".")[0], tar_names[-1].split(".")[0])
 
     first_tarname, last_tarname = get_first_and_last_tarnames()
-    wds_train_urls = f"{wds_shards_p}" + f"{first_tarname}.." + f"{last_tarname}.tar"
+    wds_train_urls = f"{wds_shards_p}/" + "{" f"{first_tarname}.." + f"{last_tarname}" + "}.tar"
     wds_train_pipeline = [wds.SimpleShardList(urls=wds_train_urls)]
     wds_train_pipeline.append(
-        wds.detshuffle(bufsize=SHARD_SHUFFLE_SIZE, initial=SHARD_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed)
+        wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed)
     )
     wds_train_pipeline.append(wds.split_by_node)
     wds_train_pipeline.append(wds.split_by_worker)
     wds_train_pipeline.append(tarfile_to_samples())
-    wds_train_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_SIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed))
+    wds_train_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed))
     wds_train_map = partial(taisu2_wds_map, tokenizer=tokenizer, data_args=data_args)
     wds_train_pipeline.append(wds.map(wds_train_map))
     train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
@@ -999,6 +999,8 @@ def train(attn_implementation=None):
         data_args.return_tensors = None
     if data_args.txts_separator == "\\n":
         data_args.txt_separator = "\n"
+    if model_args.vision_tower == "":
+        model_args.vision_tower = None
     if training_args.cache_dir == "":
         training_args.cache_dir = None
     if training_args.lora_weight_path == "":
@@ -1059,7 +1061,7 @@ def train(attn_implementation=None):
         model = InternVLChatModel.from_pretrained(
                                                   model_args.model_name_or_path, use_flash_attn=use_flash_attn, trust_remote_code=False, 
                                                   cache_dir=training_args.cache_dir, 
-                                                  torch_dtype=(torch.bfloat16 if training_args.bf16 else None), 
+                                                  torch_dtype=(torch.bfloat16 if training_args.bf16 else (torch.float16 if training_args.fp16 else torch.float32)), 
                                                   **bnb_model_from_pretrained_args
                                                  )
         data_args.context_token_per_img = model.num_image_token
@@ -1113,7 +1115,7 @@ def train(attn_implementation=None):
         rank0_print("Adding LoRA adapters...")
         model = get_peft_model(model, lora_config)
 
-    if 'mpt' in model_args.model_name_or_path:
+    if 'mpt' in model_args.model_name_or_path.lower():
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=training_args.cache_dir,
@@ -1211,7 +1213,7 @@ def train(attn_implementation=None):
                 p.requires_grad = True
 
         model.config.freeze_mm_mlp_adapter = training_args.freeze_mm_mlp_adapter
-        if training_args.freeze_mm_mlp_adater:
+        if training_args.freeze_mm_mlp_adapter:
             model.requires_grad_(True)
             for p in model.mlp1.parameters():
                 p.requires_grad = False

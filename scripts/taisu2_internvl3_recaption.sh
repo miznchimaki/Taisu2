@@ -64,7 +64,11 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_shuffle_seed 42 \
           --txts_separator "\n" \
           --cache_dir "" \
+          --bf16 true \
+          --tf32 true \
           --optim adamw_torch \
+          --dataloader_num_workers 8 \
+          --dataloader_persistent_worker true \
           --remove_unused_columns false \
           --freeze_mm_mlp_adapter false \
           --freeze_llm false \
