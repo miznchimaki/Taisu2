@@ -982,8 +982,6 @@ def make_wds_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args:
 
 
 def train(attn_implementation=None):
-    # TODO: Debug!
-    import pdb; pdb.set_trace()
     global local_rank
 
     parser = transformers.HfArgumentParser(

@@ -21,6 +21,7 @@ echo "communication port of master node: ${MASTER_PORT}"
 printf "\n"
 
 
+source $HOME/.bashrc
 conda activate xiaobao12
 cd $HOME/projects/Taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
