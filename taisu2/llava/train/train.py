@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 import pathlib
-from typing import Dict, Optional, Sequence, List
+from typing import Dict, Optional, Sequence, List, Literal
 from functools import partial
 
 import torch
@@ -89,9 +89,9 @@ class DataArguments:
     return_tensors: Optional[str | None] = field(default=None)
     return_attention_mask: Optional[bool | None] = field(default=None)
     # data arguments for webdataset
-    wds_shards_folder: Optional[str] = field(default="image-alttext-total-8.00M-at-2025-04-11-19:42:01")
+    wds_shards_folder: Optional[str] = field(default=None)
     wds_shards_subfolder: Optional[str] = field(default="rename_and_rearchive")
-    wds_batch_per_epoch: Optional[int] = field(default=None)
+    wds_nsamples_per_epoch: Optional[int] = field(default=None)
     wds_last_batch: Optional[bool] = field(default=True)
     wds_shuffle_seed: Optional[int] = field(default=42)
     # data arguments for image-text preprocessing
@@ -125,12 +125,12 @@ class TrainingArguments(transformers.TrainingArguments):
         default=16,
         metadata={"help": "How many bits to use."}
     )
-    lora_enable: bool = False
-    lora_r: int = 64
-    lora_alpha: int = 16
-    lora_dropout: float = 0.05
-    lora_weight_path: str = ""
-    lora_bias: str = "none"
+    lora_enable: bool = field(default=False)
+    lora_r: int = field(default=64)
+    lora_alpha: int = field(defualt=16)
+    lora_dropout: float = field(default=0.05)
+    lora_weight_path: str = field(default=None)
+    lora_bias: Literal["none", "all", "lora_only"] = "none"
     group_by_modality_length: bool = field(default=False)
 
 
@@ -968,12 +968,14 @@ def make_wds_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args:
     wds_train_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_SIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed))
     wds_train_map = partial(taisu2_wds_map, tokenizer=tokenizer, data_args=data_args)
     wds_train_pipeline.append(wds.map(wds_train_map))
-    train_web_ds = wds.DataPipeline(*wds_train_pipeline)
+    train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
+    if data_args.wds_nsamples_per_epoch:
+        train_web_dataset.with_epoch(nsamples=data_args.wds_nsamples_per_epoch)
 
     web_ds_collator = DataCollatorForWebDataset(pad_token_id=tokenizer.pad_token_id, conv_name=conversation_lib.default_conversation.name)
 
     return dict(
-        train_dataset=train_web_ds, 
+        train_dataset=train_web_dataset, 
         eval_dataset=None, 
         data_collator=web_ds_collator, 
     )
@@ -1223,15 +1225,21 @@ def train(attn_implementation=None):
                     if training_args.bf16 and module.weight.dtype == torch.float32:
                         module = module.to(torch.bfloat16)
 
-    wds_data_module = make_wds_data_module(
+    if data_args.wds_shards_folder is not None:
+        data_module = make_wds_data_module(
                                            tokenizer=tokenizer, 
                                            data_args=data_args
                                           )
+    else:
+        data_module = make_supervised_data_module(
+                                                  tokenizer=tokenizer, 
+                                                  data_args=data_args
+                                                 )
     trainer = LLaVATrainer(
                            model=model,
                            tokenizer=tokenizer,
                            args=training_args,
-                           **wds_data_module
+                           **data_module
                           )
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
