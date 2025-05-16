@@ -977,6 +977,7 @@ def make_wds_data_module(
     train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
     if data_args.wds_nsamples_per_epoch:
         train_web_dataset.with_epoch(nsamples=data_args.wds_nsamples_per_epoch)
+        train_web_dataset.with_length(data_args.wds_nsamples_per_epoch)
 
     web_ds_collator = DataCollatorForWebDataset(pad_token_id=tokenizer.pad_token_id, conv_name=conversation_lib.default_conversation.name)
 
@@ -1259,7 +1260,7 @@ def train(attn_implementation=None):
                                                  )
     trainer = LLaVATrainer(
                            model=model,
-                           tokenizer=tokenizer,
+                           processing_class=tokenizer,
                            args=training_args,
                            **data_module
                           )

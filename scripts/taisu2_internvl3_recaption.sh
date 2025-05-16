@@ -59,7 +59,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --return_attention_mask false \
           --wds_shards_folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
           --wds_shards_subfolder rename_and_rearchive \
-          --wds_nsamples_per_epoch 0 \
+          --wds_nsamples_per_epoch 8000000 \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
           --txts_separator "\n" \
