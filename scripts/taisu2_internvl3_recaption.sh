@@ -67,7 +67,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --txts_separator "\n" \
           --per_device_train_batch_size 4 \
           --gradient_accumulation_steps 1 \
-          --num_train_epochs 2.0 \
+          --num_train_epochs 1.0 \
           --max_steps -1 \
           --lr_scheduler_type linear \
           --learning_rate 5e-5 \
