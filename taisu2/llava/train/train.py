@@ -32,6 +32,7 @@ from llava.multifile_tariterators import tarfile_to_samples
 
 from llava.constants import IGNORE_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL, SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
+from llava.constants import IMG_CONTEXT_TOKEN
 from torch.utils.data import Dataset
 from llava.train.llava_trainer import LLaVATrainer
 
@@ -100,6 +101,7 @@ class DataArguments:
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
+    wandb_project: Optional[str] = field(default="Taisu2")
     optim: str = field(default="adamw_torch")
     remove_unused_columns: bool = field(default=False)
     freeze_mm_mlp_adapter: bool = field(default=False)
@@ -911,6 +913,7 @@ def make_supervised_data_module(
 @dataclass
 class DataCollatorForWebDataset(object):
     """Collate image-text data for webdataset IterableDataset"""
+    tokenizer: transformers.PreTrainedTokenizer
     pad_token_id: int
     conv_name: str
 
@@ -918,12 +921,12 @@ class DataCollatorForWebDataset(object):
         batch_input_ids = (data["input_ids"] for data in img_text_data)
         batch_labels = (data["labels"] for data in img_text_data)
         batch_input_ids = torch.nn.utils.rnn.pad_sequence(
-                                                          batch_input_ids, 
+                                                          list(batch_input_ids), 
                                                           batch_first=True, 
                                                           padding_value=self.pad_token_id
                                                          )
         batch_labels = torch.nn.utils.rnn.pad_sequence(
-                                                       batch_labels, 
+                                                       list(batch_labels), 
                                                        batch_first=True, 
                                                        padding_value=IGNORE_INDEX
                                                       )
@@ -932,19 +935,17 @@ class DataCollatorForWebDataset(object):
             return dict(
                         input_ids=batch_input_ids, 
                         labels=batch_labels, 
-                        pixel_values=None, 
-                        image_flags=None
                        )
         else:
             batch_imgs = (data["pixel_values"] for data in img_text_data)
-            batch_imgs = torch.cat(batch_imgs, dim=0)
+            batch_imgs = torch.cat(tuple(batch_imgs), dim=0)
             if "internvl2_5" in self.conv_name or "internvl3" in self.conv_name:
-                image_flags = torch.ones((batch_imgs.shape(0), 1), dtype=torch.int)
+                image_flags = torch.ones((batch_imgs.shape[0], 1), dtype=torch.int)
                 return dict(
-                            input_ids=batch_input_ids, 
-                            labels=batch_labels, 
                             pixel_values=batch_imgs, 
-                            image_flags=image_flags
+                            input_ids=batch_input_ids, 
+                            image_flags=image_flags, 
+                            labels=batch_labels, 
                            )
 
 
@@ -979,7 +980,11 @@ def make_wds_data_module(
         train_web_dataset.with_epoch(nsamples=data_args.wds_nsamples_per_epoch)
         train_web_dataset.with_length(data_args.wds_nsamples_per_epoch)
 
-    web_ds_collator = DataCollatorForWebDataset(pad_token_id=tokenizer.pad_token_id, conv_name=conversation_lib.default_conversation.name)
+    web_ds_collator = DataCollatorForWebDataset(
+                                                tokenizer=tokenizer, 
+                                                pad_token_id=tokenizer.pad_token_id, 
+                                                conv_name=conversation_lib.default_conversation.name
+                                               )
 
     return dict(
         train_dataset=train_web_dataset, 
@@ -1132,6 +1137,8 @@ def train(attn_implementation=None):
                                                                trust_remote_code=True, 
                                                                use_fast=False
                                                               )
+        if not model.img_context_token_id:
+            model.img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
     else:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
@@ -1258,6 +1265,8 @@ def train(attn_implementation=None):
                                                   tokenizer=tokenizer, 
                                                   data_args=data_args
                                                  )
+
+    os.environ["WANDB_PROJECT"] = training_args.wandb_project
     trainer = LLaVATrainer(
                            model=model,
                            processing_class=tokenizer,

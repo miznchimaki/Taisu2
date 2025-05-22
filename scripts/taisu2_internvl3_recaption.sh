@@ -63,9 +63,14 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
           --txts_separator "\n" \
+          --per_device_train_batch_size 8 \
+          --output_dir "$HOME/outputs/Taisu2/debug" \
           --cache_dir "" \
+          --wandb_project "Taisu2_debug" \
+          --run_name "debug" \
           --bf16 true \
           --tf32 true \
+          --report_to "none" \
           --optim adamw_torch \
           --dataloader_num_workers 8 \
           --dataloader_persistent_worker true \

@@ -135,7 +135,7 @@ def taisu2_img_preprocess(
     pixel_values = [transform(pil_image) for pil_image in pil_images]
     pixel_values = torch.stack(pixel_values)
 
-    return dict(pixel_value=pixel_values, sub_img_num=len(pil_images))
+    return dict(pixel_values=pixel_values, sub_img_num=len(pil_images))
 
 
 # All functions below are text preprocess
@@ -244,7 +244,7 @@ def taisu2_preprocess_internvl2_5(
             conv_prompt = conv_prompt.replace("<image>", IMG_START_TOKEN + sub_img_num_per * context_token_per_img * IMG_CONTEXT_TOKEN + IMG_END_TOKEN, 1)
     remained_img_token_num = conv_prompt.count("<image>")
     if remained_img_token_num:
-        raise ValueError(f"after replacing all `<image>` into image context tokens, there're still `<image>` left: {conv_prompt}")
+        raise ValueError(f"after replacing all `<image>` into image context tokens, there're still `<image>` left: \n{conv_prompt}")
     tokenized_res = tokenizer(conv_prompt, padding=padding, padding_side=padding_side, 
                               return_tensors=return_tensors, 
                               return_attention_mask=return_attention_mask)
@@ -338,7 +338,9 @@ def taisu2_wds_map(
                          )
     if isinstance(wds_sample["jpg"], bytes):
         pil_img = Image.open(io.BytesIO(wds_sample["jpg"])).convert("RGB")
-        pixel_values, sub_img_num = wds_img_map(pil_img)
+        img_map_res = wds_img_map(pil_img)
+        pixel_values = img_map_res["pixel_values"]
+        sub_img_num = img_map_res["sub_img_num"]
     else:
         imgs_list = []
         sub_img_num = []
@@ -346,7 +348,7 @@ def taisu2_wds_map(
             img_bytes = wds_sample["jpg"][img_idx]
             pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
             img_map_res = wds_img_map(pil_img)
-            imgs_list.append(img_map_res[0]); sub_img_num.append(img_map_res[1])
+            imgs_list.append(img_map_res["pixel_values"]); sub_img_num.append(img_map_res["sub_img_num"])
         pixel_values = torch.cat(imgs_list, dim=0)
     data_stem_name = wds_sample["__key__"]
 
