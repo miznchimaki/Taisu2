@@ -75,7 +75,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --warmup_ratio 0.0 \
           --output_dir "$HOME/outputs/Taisu2/debug" \
           --cache_dir "" \
-          --wandb_project "Taisu2_debug" \
+          --wandb_project "Taisu2" \
           --run_name "debug" \
           --bf16 true \
           --tf32 true \
