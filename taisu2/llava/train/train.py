@@ -1012,6 +1012,8 @@ def train(attn_implementation=None):
         training_args.cache_dir = None
     if training_args.lora_weight_path == "":
         training_args.lora_weight_path = None
+    if data_args.wds_nsamples_per_epoch:
+        training_args.max_steps = int(data_args.wds_nsamples_per_epoch)
 
     local_rank = training_args.local_rank
     training_args._frozen = False  # compatible with transformers==4.32.0

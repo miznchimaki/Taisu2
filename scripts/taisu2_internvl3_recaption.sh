@@ -61,12 +61,14 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --return_attention_mask false \
           --wds_shards_folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
           --wds_shards_subfolder rename_and_rearchive \
-          --wds_nsamples_per_epoch 8000000 \
+          --wds_nsamples_per_epoch 5856804 \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
           --txts_separator "\n" \
           --per_device_train_batch_size 4 \
           --gradient_accumulation_steps 1 \
+          --num_train_epochs 2.0 \
+          --max_steps -1 \
           --lr_scheduler_type linear \
           --learning_rate 5e-5 \
           --weight_decay 0 \
@@ -84,6 +86,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --adam_beta2 0.999 \
           --adam_epsilon 1e-8 \
           --max_grad_norm 1 \
+          --dataloader_pin_memory true \
           --dataloader_num_workers 8 \
           --dataloader_persistent_worker true \
           --remove_unused_columns false \
