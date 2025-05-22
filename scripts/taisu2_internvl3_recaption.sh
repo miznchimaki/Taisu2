@@ -79,6 +79,8 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --run_name "debug" \
           --bf16 true \
           --tf32 true \
+          --save_total_limit 1 \
+          --save_steps 500 \
           --report_to "none" \
           --logging_steps 1 \
           --optim adamw_torch \
