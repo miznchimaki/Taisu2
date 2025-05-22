@@ -109,13 +109,13 @@ class InternVLChatModel(PreTrainedModel):
             image_flags = image_flags.squeeze(-1)
             vit_embeds = self.extract_feature(pixel_values)
             vit_embeds = vit_embeds[image_flags == 1]
-            vit_batch_size = pixel_values.shape[0]
 
             B, N, C = input_embeds.shape
             input_embeds = input_embeds.reshape(B * N, C)
 
-            if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
-                print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
+            # vit_batch_size = pixel_values.shape[0]
+            # if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
+            #     print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
 
             input_ids = input_ids.reshape(B * N)
             selected = (input_ids == self.img_context_token_id)

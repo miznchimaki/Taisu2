@@ -30,11 +30,13 @@ echo "Begin Taisu2 image-alttext pairs recaption train at ${start_time_stamp}"
 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
           ./taisu2/llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
+          --accelerator_config ./scripts/accelerator_cfg.json \
           --model_name_or_path $HOME/ckpts/InternVL3-2B \
           --version internvl3 \
           --freeze_backbone false \
           --tune_mm_mlp_adapter false \
           --tune_vit_pos_embedding true \
+          --tune_vision_tower true \
           --vision_tower "" \
           --mm_vision_select_layer -1 \
           --pretrain_mm_mlp_adapter "" \
@@ -63,7 +65,12 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
           --txts_separator "\n" \
-          --per_device_train_batch_size 8 \
+          --per_device_train_batch_size 4 \
+          --gradient_accumulation_steps 1 \
+          --lr_scheduler_type linear \
+          --learning_rate 5e-5 \
+          --weight_decay 0 \
+          --warmup_ratio 0.0 \
           --output_dir "$HOME/outputs/Taisu2/debug" \
           --cache_dir "" \
           --wandb_project "Taisu2_debug" \
@@ -71,7 +78,12 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --bf16 true \
           --tf32 true \
           --report_to "none" \
+          --logging_steps 1 \
           --optim adamw_torch \
+          --adam_beta1 0.9 \
+          --adam_beta2 0.999 \
+          --adam_epsilon 1e-8 \
+          --max_grad_norm 1 \
           --dataloader_num_workers 8 \
           --dataloader_persistent_worker true \
           --remove_unused_columns false \

@@ -60,6 +60,7 @@ class ModelArguments:
     freeze_backbone: bool = field(default=False)
     tune_mm_mlp_adapter: bool = field(default=False)
     tune_vit_pos_embedding: bool = field(default=False)
+    tune_vision_tower: bool = field(default=True)
     vision_tower: Optional[str] = field(default=None)
     mm_vision_select_layer: Optional[int] = field(default=-1)   # default to the last layer
     pretrain_mm_mlp_adapter: Optional[str] = field(default=None)
@@ -1202,6 +1203,14 @@ def train(attn_implementation=None):
                     p.requires_grad = True
                     print("\tvit pos embedding name: ", name)
 
+        # tune vision tower
+        model.config.tune_vision_tower = training_args.tune_vision_tower = model_args.tune_vision_tower
+        for vision_p in vision_tower.parameters():
+            if model_args.tune_vision_tower:
+                vision_p.requires_grad = True
+            else:
+                vision_p.requires_grad = False
+
         if training_args.bits in [4, 8]:
             model.get_model().mm_projector.to(dtype=compute_dtype, device=training_args.device)
 
@@ -1234,6 +1243,14 @@ def train(attn_implementation=None):
                 if "position_embedding" in name:
                     p.requires_grad = True
                     print("\tIntern-ViT pos embedding name: ", name)
+
+        # tune Intern-ViT
+        model.config.tune_vision_tower = training_args.tune_vision_tower = model_args.tune_vision_tower
+        for vision_p in model.vision_model.parameters():
+            if model_args.tune_vision_tower:
+                vision_p.requires_grad = True
+            else:
+                vision_p.requires_grad = False
 
         if training_args.bits in (4, 8):
             model.mlp1.to(dtype=compute_dtype, device=training_args.device)
