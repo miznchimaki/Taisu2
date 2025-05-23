@@ -4,7 +4,7 @@
 # turn off the execution trace mode
 set +x
 
-HOST_FILE=${1:-"$HOME/projects/Taisu2/scripts/multinode_hostfile"}
+HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/multinode_hostfile"}
 MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
 NNODES=$(cat $HOST_FILE | wc -l)
 NODE_RANK=${3:-0}
@@ -23,13 +23,13 @@ printf "\n"
 
 source $HOME/.bashrc
 conda activate xiaobao12
-cd $HOME/projects/Taisu2/
+cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption train at ${start_time_stamp}"
 
 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
-          ./taisu2/llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
+          ./llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
           --accelerator_config ./scripts/accelerator_cfg.json \
           --model_name_or_path $HOME/ckpts/InternVL3-2B \
           --version internvl3 \

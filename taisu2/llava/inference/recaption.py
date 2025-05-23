@@ -10,8 +10,6 @@ from llava.conversation import default_conversation
 from llava.utils import disable_torch_init
 
 
-# TODO: 这个脚本的原始模板是../eval/model_qa.py,
-# TODO: 除了../eval/model_qa.py,还要参考../eval/model_vqa_loader.py
 # new stopping implementation
 class KeywordsStoppingCriteria(StoppingCriteria):
     def __init__(self, keywords, tokenizer, input_ids):
