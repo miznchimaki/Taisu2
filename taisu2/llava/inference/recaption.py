@@ -1,6 +1,8 @@
 import argparse
+from argparse import Namespace
 import os
 import json
+import torch.distributed
 from tqdm import tqdm
 from pathlib import Path, PosixPath
 
@@ -13,7 +15,7 @@ import webdataset as wds
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
 from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
 from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
-from llava.conversation import default_conversation, get_conv_template, set_default_conv_template
+from llava.conversation import conv_templates
 from llava.model import InternVLChatConfig, InternVLChatModel
 from llava.multifile_tariterators import tarfile_to_samples
 from llava.utils import disable_torch_init
@@ -39,15 +41,47 @@ class KeywordsStoppingCriteria(StoppingCriteria):
         return False
 
 
-def init_distributed():
+def set_conv_tempalte(args: Namespace = None):
+    if args.conv_template_name is None:
+        print(f"conversation template name is None, set conversation tempalte to the default one")
+        from llava.conversation import default_conversation
+        conv = default_conversation.copy()
+    elif args.conv_template_name in conv_templates:
+        print(f"get conversation name: {args.conv_template_name}")
+        conv = conv_templates[args.conv_template_name].copy()
+    else:
+        raise KeyError(f"get a wrong conversation name: {args.conv_template_name}, which does not exist!")
+    args.conversation = conv
+    return
+
+
+def init_distributed(args: Namespace = None):
+    if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
+        raise KeyError(f"either environmental variables `RANK` or `WORLD_SIZE` does not exist, cannot execute DDP initialization normally")
+    num_gpu_per_node = torch.cuda.device_count()
+    args.rank = str(os.environ["RANK"])
+    args.world_size = str(os.environ["WORLD_SIZE"])
+    args.local_rank = str(int(args.rank) & num_gpu_per_node)
+    torch.distributed.init_process_group(
+                                         backend="nccl", 
+                                         init_method="env://", 
+                                         world_size=int(args.world_size), 
+                                         rank=int(args.rank)
+                                        )
+    print(f"DDP initialized completed at process with rank {args.rank}")
+    torch.distributed.barrier()
+    return
+
+
+def create_tokenizer_and_model(args: Namespace = None):
+    # TODO: Now here
     pass
 
 
-def create_wds_and_collator():
-    pass
-
-
-def create_tokenizer_and_model():
+def create_wds_and_collator(
+                            tokenizer: transformers.PreTrainedTokenizer, 
+                            args: Namespace = None
+                           ):
     pass
 
 
@@ -98,6 +132,7 @@ def recaption(model_name, questions_file, answers_file):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=str, default=None, help="output directory of recaption json file")
+    parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
 
     # dataloader params
     parser.add_argument("--num-workers", type=int, default=8, help="number workers for DataLoader")
@@ -106,6 +141,9 @@ def parse_args():
     parser.add_argument("--drop-last", type=bool, default=False, help="drop_last param for DataLoader")
 
     # tokenizer params
+    parser.add_argument("--use-fast", type=bool, default=False, help="whether or not to use fast text tokenizer")
+    parser.add_argument("--trust-remote-code", type=bool, default=False, 
+                        help="whether or not to allow for custom defined tokenizer and model code")
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
     parser.add_argument("--padding", type=str, default="longest", choices=("longest", "max_length", "do_not_pad"), 
                         help="padding strategy for text tokenizer")
