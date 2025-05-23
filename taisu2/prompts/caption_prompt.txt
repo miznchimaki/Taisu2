@@ -1,0 +1,8 @@
+native_prompts:
+简短地描述这张图像
+
+recaption_prompts:
+给这张图片生成一个尽可能细致的简体中文描述
+
+native_and_recaption_prompts:
+结合原始的图像描述，给这张图片生成一个更加细致更加全面而且幻觉与错误更少的简体中文描述
