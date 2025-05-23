@@ -10,12 +10,13 @@ from PIL import Image, ImageFile
 import torch
 from torch.utils.data import Dataset, IterableDataset, DataLoader
 import transformers
-from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria
+from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM, StoppingCriteria
 import webdataset as wds
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
 from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
 from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
 from llava.conversation import conv_templates
+from llava.model import LlavaMptForCausalLM, LlavaLlamaForCausalLM
 from llava.model import InternVLChatConfig, InternVLChatModel
 from llava.multifile_tariterators import tarfile_to_samples
 from llava.utils import disable_torch_init
@@ -74,59 +75,78 @@ def init_distributed(args: Namespace = None):
 
 
 def create_tokenizer_and_model(args: Namespace = None):
+    model_name_or_path = args.model_name_or_path
+    mpt_flag = "mpt" in model_name_or_path
+    internvl_flag = "internvl2_5" in model_name_or_path or "internvl3" in model_name_or_path
+    tokenizer = AutoTokenizer.from_pretrained(
+                                              model_name_or_path, 
+                                              cache_dir=args.cache_dir, 
+                                              use_fast=args.use_fast, 
+                                              trust_remote_code=args.trust_remote_code, 
+                                              model_max_length=args.model_max_length, 
+                                              padding=args.padding, 
+                                              truncation=args.truncation, 
+                                              padding_side=args.padding_side if not mpt_flag else "right", 
+                                              return_tensors=args.return_tensors, 
+                                              return_attention_mask=args.return_attention_mask, 
+                                             )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.unk_token
+        tokenizer.pad_token_id = tokenizer.unk_token_id
+
+    device_map = {"": f"cuda:{args.local_rank}"}
+    if not internvl_flag:
+        if "mpt" in model_name_or_path:
+            config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
+            if args.mpt_attn_impl is not None:
+                config.attn_config["attn_impl"] = args.mpt_attn_impl
+            model = LlavaMptForCausalLM.from_pretrained(
+                                                        model_name_or_path, 
+                                                        config=config, 
+                                                        cache_dir=args.cache_dir, 
+                                                        device_map=device_map, 
+                                                       )
+        else:
+            model = LlavaLlamaForCausalLM.from_pretrained(
+                                                          model_name_or_path, 
+                                                          cache_dir=args.cache_dir, 
+                                                          torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
+                                                          attn_implementation="flash_attention_2" if args.use_flash_attn else None, 
+                                                          device_map=device_map, 
+                                                         )
+    else:
+        img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
+        model = InternVLChatModel.from_pretrained(
+                                                  model_name_or_path, 
+                                                  cache_dir=args.cache_dir, 
+                                                  trust_remote_code=args.trust_remote_code, 
+                                                  use_flash_attn=args.use_flash_attn, 
+                                                  torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
+                                                  device_map=device_map, 
+                                                 )
+        model.img_context_token_id = img_context_token_id
+    model.eval()
+    model.config.use_cache = False
+
+    return dict(tokenizer=tokenizer, model=model)
+
+
+def create_dataloader(
+                      tokenizer: transformers.PreTrainedTokenizer, 
+                      args: Namespace = None
+                     ):
     # TODO: Now here
     pass
 
 
-def create_wds_and_collator(
-                            tokenizer: transformers.PreTrainedTokenizer, 
-                            args: Namespace = None
-                           ):
-    pass
-
-
 @torch.inference_mode()
-def recaption(model_name, questions_file, answers_file):
-    # Model
-    disable_torch_init()
-    model_name = os.path.expanduser(model_name)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
-    model = AutoModelForCausalLM.from_pretrained(model_name,
-        torch_dtype=torch.float16).cuda()
-
-    ques_file = open(os.path.expanduser(questions_file), "r")
-    ans_file = open(os.path.expanduser(answers_file), "w")
-    for i, line in enumerate(tqdm(ques_file)):
-        idx = json.loads(line)["question_id"]
-        qs = json.loads(line)["text"]
-        cat = json.loads(line)["category"]
-        conv = default_conversation.copy()
-        conv.append_message(conv.roles[0], qs)
-        prompt = conv.get_prompt()
-        inputs = tokenizer([prompt])
-        input_ids = torch.as_tensor(inputs.input_ids).cuda()
-        stopping_criteria = KeywordsStoppingCriteria([conv.sep], tokenizer, input_ids)
-        output_ids = model.generate(
-            input_ids,
-            do_sample=True,
-            use_cache=True,
-            temperature=0.7,
-            max_new_tokens=1024,
-            stopping_criteria=[stopping_criteria])
-        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0]
-        try:
-            index = outputs.index(conv.sep, len(prompt))
-        except ValueError:
-            outputs += conv.sep
-            index = outputs.index(conv.sep, len(prompt))
-
-        outputs = outputs[len(prompt) + len(conv.roles[1]) + 2:index].strip()
-        ans_file.write(json.dumps({"question_id": idx,
-                                   "text": outputs,
-                                   "model_id": model_name,
-                                   "metadata": {}}) + "\n")
-        ans_file.flush()
-    ans_file.close()
+def recaption(
+              tokenizer: transformers.PreTrainedTokenizer, 
+              model: transformers.PreTrainedModel, 
+              data_loader: DataLoader, 
+              args: Namespace = None
+             ):
+    pass
 
 
 def parse_args():
@@ -144,6 +164,7 @@ def parse_args():
     parser.add_argument("--use-fast", type=bool, default=False, help="whether or not to use fast text tokenizer")
     parser.add_argument("--trust-remote-code", type=bool, default=False, 
                         help="whether or not to allow for custom defined tokenizer and model code")
+    parser.add_argument("--cache-dir", type=str, default=None, help="path where a downloaded pretrained model is cached")
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
     parser.add_argument("--padding", type=str, default="longest", choices=("longest", "max_length", "do_not_pad"), 
                         help="padding strategy for text tokenizer")
@@ -169,6 +190,7 @@ def parse_args():
                         help="model remote repository name or local directory")
     parser.add_argument("--data-type", type=str, choices=("bfloat16", "float16"), default="bfloat16", 
                         help="Tensor data type for model and input data")
+    parser.add_argument("--mpt-attn-impl", type=str, default="triton")
     parser.add_argument("--use-flash-attn", type=bool, default=True, help="whether model using flash atention")
 
     # generation params

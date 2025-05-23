@@ -320,7 +320,8 @@ class InternVLChatModel(PreTrainedModel):
             **generate_kwargs,
     ) -> torch.LongTensor:
 
-        assert self.img_context_token_id is not None
+        if self.img_context_token_id is None:
+            raise AttributeError(f"img_context_token_id of model should not be None")
         if pixel_values is not None:
             if visual_features is not None:
                 vit_embeds = visual_features
@@ -332,7 +333,8 @@ class InternVLChatModel(PreTrainedModel):
 
             input_ids = input_ids.reshape(B * N)
             selected = (input_ids == self.img_context_token_id)
-            assert selected.sum() != 0
+            if selected.sum() == 0:
+                raise ValueError(f"number of image context token in input indices should not be 0")
             input_embeds[selected] = vit_embeds.reshape(-1, C).to(input_embeds.device)
 
             input_embeds = input_embeds.reshape(B, N, C)
