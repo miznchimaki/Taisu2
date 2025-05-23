@@ -154,18 +154,18 @@ def taisu2_preprocess_internvl2_5(
     if task_type.lower() not in TASKS_TYPE:
         raise ValueError(f"task for Taisu2 preprocessing function could only be `{TASKS_TYPE}`, but get {task_type}")
     if task_type.lower() == "caption":
-        prompt_file = "taisu2_caption_prompt.txt"
+        prompt_file = "caption_prompt.txt"
     elif task_type.lower() == "visual_grounding":
-        prompt_file = "taisu2_grounding_prompt.txt"
+        prompt_file = "grounding_prompt.txt"
     elif task_type.lower() == "ocr":
-        prompt_file = "taisu2_ocr_prompt.txt"
+        prompt_file = "ocr_prompt.txt"
     elif task_type.lower() == "visual_reasoning":
-        prompt_file = "taisu2_reasoning_prompt.txt"
+        prompt_file = "reasoning_prompt.txt"
     elif task_type.lower() == "multi_image":
-        prompt_file = "taisu2_multi_image_prompt.txt"
+        prompt_file = "multi_image_prompt.txt"
     elif task_type.lower() == "text":
         prompt_file = None
-    prompt_dir = Path(os.path.abspath(__file__)).parent / "taisu2_prompts"
+    prompt_dir = Path(os.path.abspath(__file__)).parent.parent / "prompts"
     prompt_p = prompt_dir / prompt_file if prompt_file is not None else None
     if prompt_p is not None:
         if not prompt_p.exists():
