@@ -150,7 +150,8 @@ def taisu2_preprocess_internvl2_5(
                                   padding_side: Union[str | None] = "right", 
                                   return_tensors: Union[str | None] = "pt", 
                                   return_attention_mask: Union[bool | None] = True, 
-                                 ) -> Tuple[torch.Tensor, torch.Tensor]:
+                                  is_train: bool = True
+                                 ) -> Union[Tuple[torch.Tensor, torch.Tensor] | torch.Tensor]:
     if task_type.lower() not in TASKS_TYPE:
         raise ValueError(f"task for Taisu2 preprocessing function could only be `{TASKS_TYPE}`, but get {task_type}")
     if task_type.lower() == "caption":
@@ -254,39 +255,43 @@ def taisu2_preprocess_internvl2_5(
         input_ids = torch.tensor(tokenized_res.input_ids)
     else:
         raise TypeError(f"got an unspported `return_tensors` param: {return_tensors}")
-    targets = input_ids.clone()
 
-    # Mask targets
-    sep = conv.sep + roles[1]
-    total_len = targets.ne(tokenizer.pad_token_id).sum().item()
-    rounds = conv_prompt.split(conv.sep)
-    re_rounds = [conv.sep.join(rounds[: 3])]  # system + user + gpt
-    for conv_idx in range(3, len(rounds), 2):
-        re_rounds.append(conv.sep.join(rounds[conv_idx: conv_idx + 2]))
-    cur_len = 0
-    targets[: cur_len] = IGNORE_INDEX
-    for i, rou in enumerate(re_rounds):
-        if rou == "":
-            break
-        parts = rou.split(sep)
-        if len(parts) != 2:
-            break
-        parts[0] += sep
-        round_len = len(tokenizer(rou, padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
-        round_len += len(tokenizer(conv.sep, padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
-        instruction_len = len(tokenizer(parts[0], padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
-        targets[cur_len: cur_len + instruction_len] = IGNORE_INDEX
+    if is_train:
+        targets = input_ids.clone()
+        # Mask targets
+        sep = conv.sep + roles[1]
+        total_len = targets.ne(tokenizer.pad_token_id).sum().item()
+        rounds = conv_prompt.split(conv.sep)
+        re_rounds = [conv.sep.join(rounds[: 3])]  # system + user + gpt
+        for conv_idx in range(3, len(rounds), 2):
+            re_rounds.append(conv.sep.join(rounds[conv_idx: conv_idx + 2]))
+        cur_len = 0
+        targets[: cur_len] = IGNORE_INDEX
+        for i, rou in enumerate(re_rounds):
+            if rou == "":
+                break
+            parts = rou.split(sep)
+            if len(parts) != 2:
+                break
+            parts[0] += sep
+            round_len = len(tokenizer(rou, padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
+            round_len += len(tokenizer(conv.sep, padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
+            instruction_len = len(tokenizer(parts[0], padding=False, padding_side=None, return_tensors=None, return_attention_mask=False).input_ids)
+            targets[cur_len: cur_len + instruction_len] = IGNORE_INDEX
 
-        cur_len += round_len
-    targets[cur_len: ] = IGNORE_INDEX
-    if cur_len < tokenizer.model_max_length:
-        if cur_len != total_len:
-            targets[:] = IGNORE_INDEX
-            print(f"WARNING: tokenization mismatch: {cur_len} vs. {total_len}."
-                  f" (ignored)"
-                 )
+            cur_len += round_len
+        targets[cur_len: ] = IGNORE_INDEX
+        if cur_len < tokenizer.model_max_length:
+            if cur_len != total_len:
+                targets[:] = IGNORE_INDEX
+                print(
+                      f"WARNING: tokenization mismatch: {cur_len} vs. {total_len}."
+                      f" (ignored)"
+                     )
 
-    return {"input_ids": input_ids, "labels": targets}
+        return {"input_ids": input_ids, "labels": targets}
+
+    return {"input_ids": input_ids}
 
 
 def taisu2_text_preprocess(
@@ -294,6 +299,7 @@ def taisu2_text_preprocess(
                            data_stem_name: str, 
                            task_type: str, 
                            sub_img_num: Union[int | List[int]], 
+                           is_train: bool = True, 
                            tokenizer: transformers.PreTrainedTokenizer = None, 
                            data_args = None
                           ) -> Dict[str, torch.Tensor]:
@@ -310,12 +316,14 @@ def taisu2_text_preprocess(
                                              padding=data_args.padding, 
                                              padding_side=data_args.padding_side, 
                                              return_tensors=data_args.return_tensors, 
-                                             return_attention_mask=data_args.return_attention_mask
+                                             return_attention_mask=data_args.return_attention_mask, 
+                                             is_train=is_train
                                             )
 
 
 def taisu2_wds_map(
                    wds_sample: Dict[str, str | bytes | Dict[str, bytes]], 
+                   is_train: bool = True, 
                    tokenizer: transformers.PreTrainedTokenizer = None, 
                    data_args = None
                   ):
@@ -352,7 +360,7 @@ def taisu2_wds_map(
         pixel_values = torch.cat(imgs_list, dim=0)
     data_stem_name = wds_sample["__key__"]
 
-    wds_text_map = partial(taisu2_text_preprocess, tokenizer=tokenizer, data_args=data_args)
+    wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, tokenizer=tokenizer, data_args=data_args)
     if isinstance(wds_sample["txt"], bytes):
         src_txt = wds_sample["txt"].decode(encoding="utf-8")
     else:
@@ -362,10 +370,13 @@ def taisu2_wds_map(
             src_txt.append(txt_bytes.decode(encoding="utf-8"))
     text_map_res = wds_text_map(src_txt, data_stem_name, task_type, sub_img_num)
     input_ids = text_map_res["input_ids"]
-    labels = text_map_res["labels"]
 
-    return dict(
-                input_ids=input_ids, 
-                pixel_values=pixel_values, 
-                labels=labels
-               )
+    if is_train:
+        labels = text_map_res["labels"]
+        return dict(
+                    input_ids=input_ids, 
+                    pixel_values=pixel_values, 
+                    labels=labels
+                   )
+
+    return dict(input_ids=input_ids, pixel_values=pixel_values)

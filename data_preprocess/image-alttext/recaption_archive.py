@@ -80,10 +80,14 @@ def init_logger(archive_out_dir: PosixPath, logging_level: int):
     logger = logging.getLogger("Taisu2 image-alttext pairs recaptions archive")
     logger.setLevel(logging_level)
     formatter = logging.Formatter(log_fmt_str)
-    stream_hndlr = logging.StreamHandler(); stream_hndlr.setFormatter(formatter); stream_hndlr.setLevel(logging_level)
+    stream_hndlr = logging.StreamHandler()
+    stream_hndlr.setFormatter(formatter)
+    stream_hndlr.setLevel(logging_level)
     file_hndlr = logging.FileHandler(archive_out_dir / "recaption_archive.log")
-    file_hndlr.setFormatter(formatter); file_hndlr.setLevel(logging_level)
-    logger.addHandler(stream_hndlr); logger.addHandler(file_hndlr)
+    file_hndlr.setFormatter(formatter)
+    file_hndlr.setLevel(logging_level)
+    logger.addHandler(stream_hndlr)
+    logger.addHandler(file_hndlr)
 
     return
 
@@ -100,7 +104,13 @@ def args_check_and_log(args: Namespace = None):
     return
 
 
-def single_tartxt_info(tar_p: PosixPath, shared_lock: AcquirerProxy, tartxt_dict: DictProxy, shared_tarnum: Synchronized, shared_txtnum: Synchronized):
+def single_tartxt_info(
+                       tar_p: PosixPath, 
+                       shared_lock: AcquirerProxy, 
+                       tartxt_dict: DictProxy, 
+                       shared_tarnum: Synchronized, 
+                       shared_txtnum: Synchronized
+                      ):
     tarname = tar_p.name
     with tarfile.open(tar_p, mode="r", encoding="utf-8") as tar_fp:
         txtnames = [mem_name for mem_name in tar_fp.getnames() if mem_name.endswith(".txt")]
@@ -119,14 +129,16 @@ def get_tartxt_info_task_func(tar_p: PosixPath, data_type: str = "native"):
     global tartxt_info_lock
     if data_type == "native":
         global native_tartxt_dict, shared_native_tarnum, shared_native_txtnum
-        single_tartxt_info(tar_p=tar_p, shared_lock=tartxt_info_lock, 
+        single_tartxt_info(
+                           tar_p=tar_p, shared_lock=tartxt_info_lock, 
                            tartxt_dict=native_tartxt_dict, 
                            shared_tarnum=shared_native_tarnum, 
                            shared_txtnum=shared_native_txtnum
                           )
     else:
         global recap_tartxt_dict, shared_recap_tarnum, shared_recap_txtnum
-        single_tartxt_info(tar_p=tar_p, shared_lock=tartxt_info_lock, 
+        single_tartxt_info(
+                           tar_p=tar_p, shared_lock=tartxt_info_lock, 
                            tartxt_dict=recap_tartxt_dict, 
                            shared_tarnum=shared_recap_tarnum, 
                            shared_txtnum=shared_recap_txtnum

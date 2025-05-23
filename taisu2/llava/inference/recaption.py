@@ -1,13 +1,23 @@
 import argparse
-from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria
-import torch
 import os
 import json
 from tqdm import tqdm
-import shortuuid
+from pathlib import Path, PosixPath
 
-from llava.conversation import default_conversation
+from PIL import Image, ImageFile
+import torch
+from torch.utils.data import Dataset, IterableDataset, DataLoader
+import transformers
+from transformers import AutoTokenizer, AutoModelForCausalLM, StoppingCriteria
+import webdataset as wds
+from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
+from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
+from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
+from llava.conversation import default_conversation, get_conv_template, set_default_conv_template
+from llava.model import InternVLChatConfig, InternVLChatModel
+from llava.multifile_tariterators import tarfile_to_samples
 from llava.utils import disable_torch_init
+from llava.train import DataCollatorForWebDataset
 
 
 # new stopping implementation
@@ -29,15 +39,26 @@ class KeywordsStoppingCriteria(StoppingCriteria):
         return False
 
 
+def init_distributed():
+    pass
+
+
+def create_wds_and_collator():
+    pass
+
+
+def create_tokenizer_and_model():
+    pass
+
+
 @torch.inference_mode()
-def eval_model(model_name, questions_file, answers_file):
+def recaption(model_name, questions_file, answers_file):
     # Model
     disable_torch_init()
     model_name = os.path.expanduser(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
     model = AutoModelForCausalLM.from_pretrained(model_name,
         torch_dtype=torch.float16).cuda()
-
 
     ques_file = open(os.path.expanduser(questions_file), "r")
     ans_file = open(os.path.expanduser(answers_file), "w")
@@ -66,20 +87,67 @@ def eval_model(model_name, questions_file, answers_file):
             index = outputs.index(conv.sep, len(prompt))
 
         outputs = outputs[len(prompt) + len(conv.roles[1]) + 2:index].strip()
-        ans_id = shortuuid.uuid()
         ans_file.write(json.dumps({"question_id": idx,
                                    "text": outputs,
-                                   "answer_id": ans_id,
                                    "model_id": model_name,
                                    "metadata": {}}) + "\n")
         ans_file.flush()
     ans_file.close()
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model-name", type=str, default="facebook/opt-350m")
-    parser.add_argument("--question-file", type=str, default="tables/question.jsonl")
-    parser.add_argument("--answers-file", type=str, default="answer.jsonl")
-    args = parser.parse_args()
 
-    eval_model(args.model_name, args.question_file, args.answers_file)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, default=None, help="output directory of recaption json file")
+
+    # dataloader params
+    parser.add_argument("--num-workers", type=int, default=8, help="number workers for DataLoader")
+    parser.add_argument("--batch-size", type=int, default=32, help="batch size for recaption DataLoader")
+    parser.add_argument("--pin-memory", type=bool, default=True, help="pin_memory param for DataLoader")
+    parser.add_argument("--drop-last", type=bool, default=False, help="drop_last param for DataLoader")
+
+    # tokenizer params
+    parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
+    parser.add_argument("--padding", type=str, default="longest", choices=("longest", "max_length", "do_not_pad"), 
+                        help="padding strategy for text tokenizer")
+    parser.add_argument("--truncation", type=str, default="do_not_truncate", help="truncation strategy for text tokenizer")
+    parser.add_argument("--padding-side", type=str, default="right", choices=("left", "right"), help="padding side for text tokenizer")
+    parser.add_argument("--return-tensors", type=str, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
+    parser.add_argument("--return-attention-mask", type=bool, default=True, help="whether text tokenizer returns attention mask")
+
+    # dynamic resolution params
+    parser.add_argument("--base-img-size", type=int, default=448, help="base image size for dynamic resolution strategy")
+    parser.add_argument("--min-subimg-num", type=int, default=1, help="minimum sub-image number for dynamic resolution")
+    parser.add_argument("--max-subimg-num", type=int,default=12, help="maximum sub-image number for dynamic resolution")
+    parser.add_argument("--use-thumbnail", type=bool, default=True, help="whether using thumbnail image for dynamic resolution")
+
+    # webdataset params
+    parser.add_argument("--tars-folder", type=str, default=None, help="webdataset tar file root folder")
+    parser.add_argument("--tars-subfolder", type=str, default=None, help="webdataset tar file sub-root folder")
+    parser.add_argument("--num-samples", type=int, default=None, help="number of image-alttext pairs for recaptioning in total")
+    parser.add_argument("--wds-shuffle-seed", type=int, default=None, help="random seed for webdataset shuffling")
+
+    # model params
+    parser.add_argument("--model-name-or-path", type=str, default="OpenGVLab/InternVL3-2B", 
+                        help="model remote repository name or local directory")
+    parser.add_argument("--data-type", type=str, choices=("bfloat16", "float16"), default="bfloat16", 
+                        help="Tensor data type for model and input data")
+    parser.add_argument("--use-flash-attn", type=bool, default=True, help="whether model using flash atention")
+
+    # generation params
+    parser.add_argument("--max-length", type=int, default=None, help="maximum length for both prompt and generated tokens")
+    parser.add_argument("--max-new-tokens", type=int, default=None, help="maximum generated new tokens number")
+    parser.add_argument("--min-length", type=int, default=None, help="minimum length for both prompt and generated tokens")
+    parser.add_argument("--do-sample", type=bool, default=False, help="whether or not to use sampling generation, use greedy decoding otherwise")
+    parser.add_argument("--num-beams", type=int, default=5, help="beam number for beam search based generation")
+    parser.add_argument("--temperature", type=float, default=1.0, help="temperature value used for moduling generation probabilites")
+    parser.add_argument("--top-k", type=int, default=50, help="highest probability tokens number for top-k filtering")
+    parser.add_argument("--top-p", type=float, default=1.0, help="low bound of accumulated probability for top-p filtering")
+    parser.add_argument("--repetition-penalty", type=float, default=1.0, help="parameter for repetition penalty, 1.0 means no penalty")
+    parser.add_argument("--length-penalty", type=float, default=1.0, help="exponential penalty to the length when using beam-based generation")
+
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == "__main__":
+    args = parse_args()

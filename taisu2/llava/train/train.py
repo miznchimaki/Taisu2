@@ -917,37 +917,48 @@ class DataCollatorForWebDataset(object):
     tokenizer: transformers.PreTrainedTokenizer
     pad_token_id: int
     conv_name: str
+    is_train: bool = True
 
     def __call__(self, img_text_data: Sequence[Dict]) -> Dict[str, torch.Tensor]:
         batch_input_ids = (data["input_ids"] for data in img_text_data)
-        batch_labels = (data["labels"] for data in img_text_data)
         batch_input_ids = torch.nn.utils.rnn.pad_sequence(
                                                           list(batch_input_ids), 
                                                           batch_first=True, 
                                                           padding_value=self.pad_token_id
                                                          )
-        batch_labels = torch.nn.utils.rnn.pad_sequence(
-                                                       list(batch_labels), 
-                                                       batch_first=True, 
-                                                       padding_value=IGNORE_INDEX
-                                                      )
+        if self.is_train:
+            batch_labels = (data["labels"] for data in img_text_data)
+            batch_labels = torch.nn.utils.rnn.pad_sequence(
+                                                           list(batch_labels), 
+                                                           batch_first=True, 
+                                                           padding_value=IGNORE_INDEX
+                                                          )
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
         if batch_no_imgs:
-            return dict(
-                        input_ids=batch_input_ids, 
-                        labels=batch_labels, 
-                       )
+            if self.is_train:
+                return dict(
+                            input_ids=batch_input_ids, 
+                            labels=batch_labels, 
+                           )
+            else:
+                return dict(input_ids=batch_input_ids)
         else:
             batch_imgs = (data["pixel_values"] for data in img_text_data)
             batch_imgs = torch.cat(tuple(batch_imgs), dim=0)
             if "internvl2_5" in self.conv_name or "internvl3" in self.conv_name:
-                image_flags = torch.ones((batch_imgs.shape[0], 1), dtype=torch.int)
-                return dict(
-                            pixel_values=batch_imgs, 
-                            input_ids=batch_input_ids, 
-                            image_flags=image_flags, 
-                            labels=batch_labels, 
-                           )
+                if self.is_train:
+                    image_flags = torch.ones((batch_imgs.shape[0], 1), dtype=torch.int)
+                    return dict(
+                                pixel_values=batch_imgs, 
+                                input_ids=batch_input_ids, 
+                                image_flags=image_flags, 
+                                labels=batch_labels, 
+                               )
+                else:
+                    return dict(
+                                pixel_values=batch_imgs, 
+                                input_ids=batch_input_ids
+                               )
 
 
 def make_wds_data_module(
@@ -974,7 +985,7 @@ def make_wds_data_module(
     wds_train_pipeline.append(wds.split_by_worker)
     wds_train_pipeline.append(tarfile_to_samples())
     wds_train_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed))
-    wds_train_map = partial(taisu2_wds_map, tokenizer=tokenizer, data_args=data_args)
+    wds_train_map = partial(taisu2_wds_map, is_train=True, tokenizer=tokenizer, data_args=data_args)
     wds_train_pipeline.append(wds.map(wds_train_map))
     train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
     if data_args.wds_nsamples_per_epoch:
