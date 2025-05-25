@@ -1,9 +1,12 @@
 import argparse
 from argparse import Namespace
+import math
 import os
 import json
 import torch.distributed
 from tqdm import tqdm
+from functools import partial
+from typing import Union, Tuple, TypedDict
 from pathlib import Path, PosixPath
 
 from PIL import Image, ImageFile
@@ -15,10 +18,11 @@ import webdataset as wds
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
 from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
 from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
-from llava.conversation import conv_templates
+from llava.conversation import conv_templates, set_default_conv_template
 from llava.model import LlavaMptForCausalLM, LlavaLlamaForCausalLM
 from llava.model import InternVLChatConfig, InternVLChatModel
 from llava.multifile_tariterators import tarfile_to_samples
+from llava.taisu2_preprocess import taisu2_wds_map
 from llava.utils import disable_torch_init
 from llava.train import DataCollatorForWebDataset
 
@@ -49,10 +53,9 @@ def set_conv_tempalte(args: Namespace = None):
         conv = default_conversation.copy()
     elif args.conv_template_name in conv_templates:
         print(f"get conversation name: {args.conv_template_name}")
-        conv = conv_templates[args.conv_template_name].copy()
+        set_default_conv_template(args.conv_template_name)
     else:
         raise KeyError(f"get a wrong conversation name: {args.conv_template_name}, which does not exist!")
-    args.conversation = conv
     return
 
 
@@ -74,7 +77,12 @@ def init_distributed(args: Namespace = None):
     return
 
 
-def create_tokenizer_and_model(args: Namespace = None):
+class OutputDict1(TypedDict):
+    tokenizer: transformers.PreTrainedTokenizer
+    model: transformers.PreTrainedModel
+
+
+def create_tokenizer_and_model(args: Namespace = None) -> OutputDict1:
     model_name_or_path = args.model_name_or_path
     mpt_flag = "mpt" in model_name_or_path
     internvl_flag = "internvl2_5" in model_name_or_path or "internvl3" in model_name_or_path
@@ -125,6 +133,7 @@ def create_tokenizer_and_model(args: Namespace = None):
                                                   device_map=device_map, 
                                                  )
         model.img_context_token_id = img_context_token_id
+        args.context_token_per_img = model.num_image_token
     model.eval()
     model.config.use_cache = False
 
@@ -134,9 +143,52 @@ def create_tokenizer_and_model(args: Namespace = None):
 def create_dataloader(
                       tokenizer: transformers.PreTrainedTokenizer, 
                       args: Namespace = None
-                     ):
-    # TODO: Now here
-    pass
+                     ) -> DataLoader:
+    root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
+    tars_p = root_dir / args.tars_folder / args.tars_subfolder / "image-text-pairs"
+    if not tars_p.exists():
+        raise FileNotFoundError(f"tar files directory - {tars_p}, does not exist!")
+
+    def get_first_and_last_tarname() -> Tuple[str, str]:
+        tar_names = sorted(os.listdir(tars_p))
+        return tar_names[0].split(".")[0], tar_names[-1].split(".")[0]
+
+    first_tarname, last_tarname = get_first_and_last_tarname()
+    tar_urls = f"{tars_p}/" + "{" + f"{first_tarname}.." + f"{last_tarname}" + "}.tar"
+    wds_pipeline = [wds.SimpleShardList(urls=tar_urls)]
+    if args.wds_shuffle_seed is not None:
+        wds_pipeline.append(wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
+    wds_pipeline.append(wds.split_by_node)
+    wds_pipeline.append(wds.split_by_worker)
+    wds_pipeline.append(tarfile_to_samples())
+    if args.wds_shuffle_seed is not None:
+        wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
+    recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, data_args=args)
+    wds_pipeline.append(wds.map(recaption_map_func))
+    recaption_wds = wds.DataPipeline(*wds_pipeline)
+    assert args.num_samples is not None, f"number of samples for dataset based on webdataset must be applied!"
+    recaption_wds.with_epoch(nsamples=args.num_samples)
+    recaption_wds.with_length(n=args.num_samples)
+
+    recaption_data_collator = DataCollatorForWebDataset(
+                                                        tokenizer=tokenizer, 
+                                                        pad_token_id=tokenizer.pad_token_id, 
+                                                        conv_name=args.conv_template_name, 
+                                                        is_train=False
+                                                       )
+
+    data_loader = DataLoader(
+                            recaption_wds, 
+                            batch_size=args.batch_size, 
+                            shuffle=False, 
+                            num_workers=args.num_workers, 
+                            collate_fn=recaption_data_collator, 
+                            pin_memory=args.pin_memory, 
+                            drop_last=args.drop_last
+                           )
+    batch_num = math.ceil(args.num_samples // args.batch_size)
+    args.batch_num = batch_num
+    return data_loader
 
 
 @torch.inference_mode()
@@ -168,7 +220,6 @@ def parse_args():
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
     parser.add_argument("--padding", type=str, default="longest", choices=("longest", "max_length", "do_not_pad"), 
                         help="padding strategy for text tokenizer")
-    parser.add_argument("--truncation", type=str, default="do_not_truncate", help="truncation strategy for text tokenizer")
     parser.add_argument("--padding-side", type=str, default="right", choices=("left", "right"), help="padding side for text tokenizer")
     parser.add_argument("--return-tensors", type=str, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
     parser.add_argument("--return-attention-mask", type=bool, default=True, help="whether text tokenizer returns attention mask")
@@ -211,3 +262,11 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    set_conv_tempalte(args=args)
+    init_distributed(args=args)
+
+    create_res = create_tokenizer_and_model(args=args)
+    tokenizer = create_res["tokenizer"]; model = create_res["model"]
+    data_loader = create_dataloader(tokenizer, args=args)
+
+    recaption(tokenizer, model, data_loader, args=args)
