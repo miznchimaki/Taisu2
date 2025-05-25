@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 import pathlib
-from typing import Dict, Optional, Sequence, List, Literal
+from typing import Dict, Optional, Sequence, Tuple, Literal
 from functools import partial
 
 import torch
@@ -933,6 +933,9 @@ class DataCollatorForWebDataset(object):
                                                            batch_first=True, 
                                                            padding_value=IGNORE_INDEX
                                                           )
+        else:
+            batch_attn_mask = (batch_input_ids != self.pad_token_id).to(dtype=torch.long, device=batch_input_ids.device)
+            batch_inputs_len = batch_attn_mask.sum(dim=1, keepdim=False)
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
         if batch_no_imgs:
             if self.is_train:
@@ -941,7 +944,11 @@ class DataCollatorForWebDataset(object):
                             labels=batch_labels, 
                            )
             else:
-                return dict(input_ids=batch_input_ids)
+                return dict(
+                            input_ids=batch_input_ids, 
+                            attention_mask=batch_attn_mask, 
+                            inputs_len=batch_inputs_len, 
+                           )
         else:
             batch_imgs = (data["pixel_values"] for data in img_text_data)
             batch_imgs = torch.cat(tuple(batch_imgs), dim=0)
@@ -957,7 +964,9 @@ class DataCollatorForWebDataset(object):
                 else:
                     return dict(
                                 pixel_values=batch_imgs, 
-                                input_ids=batch_input_ids
+                                input_ids=batch_input_ids, 
+                                attention_mask=batch_attn_mask, 
+                                inputs_len=batch_inputs_len, 
                                )
 
 
@@ -971,12 +980,12 @@ def make_wds_data_module(
     if not wds_shards_p.exists():
         raise FileNotFoundError(f"sharded tar files directory - {wds_shards_p}, does not exist!")
 
-    def get_first_and_last_tarnames() -> List[str]:
+    def get_first_and_last_tarnames() -> Tuple[str]:
         tar_names = sorted(os.listdir(wds_shards_p))
-        return (tar_names[0].split(".")[0], tar_names[-1].split(".")[0])
+        return tar_names[0].split(".")[0], tar_names[-1].split(".")[0]
 
     first_tarname, last_tarname = get_first_and_last_tarnames()
-    wds_train_urls = f"{wds_shards_p}/" + "{" f"{first_tarname}.." + f"{last_tarname}" + "}.tar"
+    wds_train_urls = f"{wds_shards_p}/" + "{" + f"{first_tarname}.." + f"{last_tarname}" + "}.tar"
     wds_train_pipeline = [wds.SimpleShardList(urls=wds_train_urls)]
     wds_train_pipeline.append(
         wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed)
@@ -992,16 +1001,16 @@ def make_wds_data_module(
         train_web_dataset.with_epoch(nsamples=data_args.wds_nsamples_per_epoch)
         train_web_dataset.with_length(data_args.wds_nsamples_per_epoch)
 
-    web_ds_collator = DataCollatorForWebDataset(
-                                                tokenizer=tokenizer, 
-                                                pad_token_id=tokenizer.pad_token_id, 
-                                                conv_name=conversation_lib.default_conversation.name
-                                               )
+    wds_collator = DataCollatorForWebDataset(
+                                             tokenizer=tokenizer, 
+                                             pad_token_id=tokenizer.pad_token_id, 
+                                             conv_name=conversation_lib.default_conversation.name
+                                            )
 
     return dict(
         train_dataset=train_web_dataset, 
         eval_dataset=None, 
-        data_collator=web_ds_collator, 
+        data_collator=wds_collator, 
     )
 
 

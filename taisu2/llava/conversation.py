@@ -716,9 +716,9 @@ def set_default_conv_template(conv_temp: Union[str, Conversation]):
     if not isinstance(conv_temp, (str, Conversation)):
         raise TypeError(f"type of param `conv_temp` should be str or Conversation")
     if isinstance(conv_temp, str):
-        default_conversation = conv_templates[conv_temp]
+        default_conversation = conv_templates[conv_temp].copy()
     if isinstance(conv_temp, Conversation):
-        default_conversation = conv_temp
+        default_conversation = conv_temp.copy()
 
     return default_conversation
 
