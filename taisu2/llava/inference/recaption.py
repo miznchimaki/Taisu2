@@ -2,11 +2,12 @@ import argparse
 from argparse import Namespace
 import math
 import os
+import shutil
 import json
 import torch.distributed
 from tqdm import tqdm
 from functools import partial
-from typing import Union, Tuple, TypedDict
+from typing import Union, Tuple, TypedDict, List
 from pathlib import Path, PosixPath
 
 from PIL import Image, ImageFile
@@ -147,6 +148,12 @@ def create_dataloader(
                       args: Namespace = None
                      ) -> DataLoader:
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
+    output_dir = root_dir / args.tars_folder / f"{args.recaption_idx}th_recaption"
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    else:
+        output_dir.mkdir(parents=True, exist_ok=False)
+    args.output_dir = str(output_dir)
     tars_p = root_dir / args.tars_folder / args.tars_subfolder / "image-text-pairs"
     if not tars_p.exists():
         raise FileNotFoundError(f"tar files directory - {tars_p}, does not exist!")
@@ -189,7 +196,9 @@ def create_dataloader(
                             drop_last=args.drop_last
                            )
     batch_num = math.ceil(args.num_samples // args.batch_size)
+    batch_num_per_rank = batch_num // args.world_size
     args.batch_num = batch_num
+    args.batch_num_per_rank = batch_num_per_rank
     return data_loader
 
 
@@ -224,12 +233,60 @@ def recaption(
     )
     generation_cfg.update(remained_cfg)
     recaption_res = dict()
+    recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
+    recaption_p.unlink(missing_ok=True)
+
+    for batch_idx, batch_data in enumerate(tqdm(data_loader, desc=f"{args.recaption_idx}th_recaption", total=args.batch_num_per_rank, disable=args.rank != 0)):
+        pixel_values: torch.Tensor = batch_data["pixel_values"]
+        input_ids: torch.LongTensor = batch_data["input_ids"]
+        attention_mask: torch.LongTensor = batch_data["attention_mask"]
+        data_names: List[str] = batch_data["data_names"]
+        batch_recaption: torch.Tensor = model.generate(
+                                                       pixel_values=pixel_values, 
+                                                       input_ids=input_ids, 
+                                                       attention_mask=attention_mask, 
+                                                       **generation_cfg
+                                                      )
+        recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
+        if len(data_names) != len(recaption_strs):
+            raise ValueError(f"the {batch_idx}th batch on process with rank {args.rank} encounter a length inequality "
+                             f"between input data_names({len(data_names)}) and outupt recaption strings ({len(recaption_strs)})!")
+        for data_name, recaption_str in zip(data_names, recaption_strs):
+            recaption_res.update({data_name: recaption_str})
+
+    with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
+        json.dump(recaption_res, recaption_fp, ensure_ascii=False)
+    return
+
+
+def recaption_res_aggregation(args: Namespace = None):
+    all_recaption_res = {}
+    path_generator = Path(args.output_dir).glob("*th_recaption_rank_*.json")
+    while True:
+        try:
+            recaption_res_p = next(path_generator)
+            with open(recaption_res_p, mode="r", encoding="utf-8") as recaption_res_fp:
+                recaption_res = json.load(recaption_res_fp)
+                all_recaption_res.update(recaption_res)
+        except StopIteration as _:
+            break
+    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}_recaption.json"
+    with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
+        json.dump(all_recaption_res, res_fp, ensure_ascii=False)
+    return
+
+
+def args_save(args: Namespace = None):
+    args_p = Path(args.output_dir) / "arguments.json"
+    args_dict = vars(args)
+    with open(args_p, mode="w", encoding="utf-8") as args_fp:
+        json.dump(args_dict, args_fp, ensure_ascii=False)
+    return
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
-    parser.add_argument("--output-dir", type=str, default=None, help="output directory of recaption json file")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
 
     # dataloader params
@@ -301,3 +358,5 @@ if __name__ == "__main__":
     data_loader = create_dataloader(tokenizer, args=args)
 
     recaption(tokenizer, model, data_loader, args=args)
+    recaption_res_aggregation(args=args)
+    args_save(args=args)
