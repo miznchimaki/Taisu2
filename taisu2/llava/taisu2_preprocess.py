@@ -246,9 +246,13 @@ def taisu2_preprocess_internvl2_5(
     remained_img_token_num = conv_prompt.count("<image>")
     if remained_img_token_num:
         raise ValueError(f"after replacing all `<image>` into image context tokens, there're still `<image>` left: \n{conv_prompt}")
-    tokenized_res = tokenizer(conv_prompt, padding=padding, padding_side=padding_side, 
+    tokenized_res = tokenizer(
+                              conv_prompt, 
+                              padding=padding, 
+                              padding_side=padding_side, 
                               return_tensors=return_tensors, 
-                              return_attention_mask=return_attention_mask)
+                              return_attention_mask=return_attention_mask
+                             )
     if return_tensors == "pt":
         input_ids = tokenized_res.input_ids[0]
     elif return_tensors is None:

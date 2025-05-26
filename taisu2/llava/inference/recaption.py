@@ -70,15 +70,10 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutpu
     internvl_flag = "internvl2_5" in model_name_or_path or "internvl3" in model_name_or_path
     tokenizer = AutoTokenizer.from_pretrained(
                                               model_name_or_path, 
-                                              cache_dir=args.cache_dir, 
                                               use_fast=args.use_fast, 
                                               trust_remote_code=args.trust_remote_code, 
                                               model_max_length=args.model_max_length, 
-                                              padding=args.padding, 
-                                              truncation=args.truncation, 
                                               padding_side=args.padding_side if not mpt_flag else "right", 
-                                              return_tensors=args.return_tensors, 
-                                              return_attention_mask=args.return_attention_mask, 
                                              )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.unk_token
@@ -191,7 +186,7 @@ def recaption(
               data_loader: DataLoader, 
               args: Namespace = None
              ):
-    eos_token_id = tokenizer.convert_tokens_to_ids(args.conv.sep.strip())
+    eos_token_id = tokenizer.convert_tokens_to_ids(args.conversation.sep.strip())
     generation_cfg = dict()
     if args.max_new_tokens is not None:
         generation_cfg.update({"max_new_tokens": args.max_new_tokens})
@@ -214,7 +209,7 @@ def recaption(
         output_logits=args.output_logits, 
     )
     generation_cfg.update(remained_cfg)
-    recaption_res = dict()
+    recaption_res = dict() # per rank recaption result dictionary
     recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
     recaption_p.unlink(missing_ok=True)
 
@@ -287,9 +282,9 @@ def parse_args():
                         help="whether or not to allow for custom defined tokenizer and model code")
     parser.add_argument("--cache-dir", type=str, default=None, help="path where a downloaded pretrained model is cached")
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
-    parser.add_argument("--padding", type=str, default="longest", choices=("longest", "max_length", "do_not_pad"), 
+    parser.add_argument("--padding", type=str, default="do_not_pad", choices=("longest", "max_length", "do_not_pad"), 
                         help="padding strategy for text tokenizer")
-    parser.add_argument("--padding-side", type=str, default="right", choices=("left", "right"), help="padding side for text tokenizer")
+    parser.add_argument("--padding-side", type=str, default="left", choices=("left", "right"), help="padding side for text tokenizer")
     parser.add_argument("--return-tensors", type=str, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
     parser.add_argument("--return-attention-mask", type=bool, default=True, help="whether text tokenizer returns attention mask")
 
