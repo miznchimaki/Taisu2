@@ -7,24 +7,22 @@ import json
 import torch.distributed
 from tqdm import tqdm
 from functools import partial
-from typing import Union, Tuple, TypedDict, List
-from pathlib import Path, PosixPath
+from typing import Tuple, TypedDict, List
+from pathlib import Path
 
-from PIL import Image, ImageFile
 import torch
-from torch.utils.data import Dataset, IterableDataset, DataLoader
+from torch.utils.data import DataLoader
 import transformers
-from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM, StoppingCriteria
+from transformers import AutoConfig, AutoTokenizer
 import webdataset as wds
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
 from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
-from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
+from llava.constants import IMG_CONTEXT_TOKEN
 from llava.conversation import conv_templates, set_default_conv_template
 from llava.model import LlavaMptForCausalLM, LlavaLlamaForCausalLM
-from llava.model import InternVLChatConfig, InternVLChatModel
+from llava.model import InternVLChatModel
 from llava.multifile_tariterators import tarfile_to_samples
 from llava.taisu2_preprocess import taisu2_wds_map
-from llava.utils import disable_torch_init
 from llava.train import DataCollatorForWebDataset
 
 
@@ -61,12 +59,12 @@ def init_distributed(args: Namespace = None):
     return
 
 
-class OutputDict1(TypedDict):
+class TokenizerAndModelOutput(TypedDict):
     tokenizer: transformers.PreTrainedTokenizer
     model: transformers.PreTrainedModel
 
 
-def create_tokenizer_and_model(args: Namespace = None) -> OutputDict1:
+def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutput:
     model_name_or_path = args.model_name_or_path
     mpt_flag = "mpt" in model_name_or_path
     internvl_flag = "internvl2_5" in model_name_or_path or "internvl3" in model_name_or_path
@@ -121,7 +119,10 @@ def create_tokenizer_and_model(args: Namespace = None) -> OutputDict1:
     model.eval()
     model.config.use_cache = False
 
-    return dict(tokenizer=tokenizer, model=model)
+    return dict(
+                tokenizer=tokenizer, 
+                model=model
+               )
 
 
 def create_dataloader(
@@ -168,14 +169,14 @@ def create_dataloader(
                                                        )
 
     data_loader = DataLoader(
-                            recaption_wds, 
-                            batch_size=args.batch_size, 
-                            shuffle=False, 
-                            num_workers=args.num_workers, 
-                            collate_fn=recaption_data_collator, 
-                            pin_memory=args.pin_memory, 
-                            drop_last=args.drop_last
-                           )
+                             recaption_wds, 
+                             batch_size=args.batch_size, 
+                             shuffle=False, 
+                             num_workers=args.num_workers, 
+                             collate_fn=recaption_data_collator, 
+                             pin_memory=args.pin_memory, 
+                             drop_last=args.drop_last
+                            )
     batch_num = math.ceil(args.num_samples // args.batch_size)
     batch_num_per_rank = batch_num // args.world_size
     args.batch_num = batch_num
@@ -254,6 +255,10 @@ def recaption_res_aggregation(args: Namespace = None):
     all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}_recaption.json"
     with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
         json.dump(all_recaption_res, res_fp, ensure_ascii=False)
+
+    path_list = list(Path(args.output_dir).glob("*th_recaption_rank_*.json"))
+    for p in path_list:
+        p.unlink(missing_ok=False)
     return
 
 
