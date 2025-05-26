@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 import pathlib
-from typing import Dict, Optional, Sequence, Tuple, Literal
+from typing import Dict, Optional, Sequence, Tuple, Literal, TypedDict, List
 from functools import partial
 
 import torch
@@ -911,6 +911,15 @@ def make_supervised_data_module(
                )
 
 
+class WdsCollatorOutput(TypedDict, total=False):
+    pixel_values: Optional[torch.Tensor]
+    input_ids: Optional[torch.LongTensor]
+    attention_mask: Optional[torch.LongTensor]
+    image_flags: Optional[torch.Tensor]
+    labels: Optional[torch.LongTensor]
+    data_names: Optional[List[str]]
+
+
 @dataclass
 class DataCollatorForWebDataset(object):
     """Collate image-text data for webdataset IterableDataset"""
@@ -919,10 +928,13 @@ class DataCollatorForWebDataset(object):
     conv_name: str
     is_train: bool = True
 
-    def __call__(self, img_text_data: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        batch_input_ids = (data["input_ids"] for data in img_text_data)
+    def __call__(
+                 self, 
+                 img_text_data: Sequence[Dict]
+                ) -> WdsCollatorOutput:
+        native_input_ids = [data["input_ids"] for data in img_text_data]
         batch_input_ids = torch.nn.utils.rnn.pad_sequence(
-                                                          list(batch_input_ids), 
+                                                          native_input_ids, 
                                                           batch_first=True, 
                                                           padding_value=self.pad_token_id
                                                          )
@@ -934,8 +946,14 @@ class DataCollatorForWebDataset(object):
                                                            padding_value=IGNORE_INDEX
                                                           )
         else:
-            batch_attn_mask = (batch_input_ids != self.pad_token_id).to(dtype=torch.long, device=batch_input_ids.device)
-            batch_inputs_len = batch_attn_mask.sum(dim=1, keepdim=False)
+            max_input_len = batch_input_ids.shape[-1]
+            native_attn_mask = []
+            for input_ids in native_input_ids:
+                attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device, requires_grad=False)
+                pad_mask = torch.zeros((max_input_len - input_ids.shape[0], ), dtype=torch.long, device=input_ids.device, requires_grad=False)
+                native_attn_mask.append(torch.cat((pad_mask, attn_mask), dim=0))
+            batch_attn_mask = torch.stack(native_attn_mask, dim=0)
+            batch_names = [data["data_name"] for data in img_text_data]
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
         if batch_no_imgs:
             if self.is_train:
@@ -947,7 +965,7 @@ class DataCollatorForWebDataset(object):
                 return dict(
                             input_ids=batch_input_ids, 
                             attention_mask=batch_attn_mask, 
-                            inputs_len=batch_inputs_len, 
+                            data_names=batch_names, 
                            )
         else:
             batch_imgs = (data["pixel_values"] for data in img_text_data)
@@ -966,7 +984,7 @@ class DataCollatorForWebDataset(object):
                                 pixel_values=batch_imgs, 
                                 input_ids=batch_input_ids, 
                                 attention_mask=batch_attn_mask, 
-                                inputs_len=batch_inputs_len, 
+                                data_names=batch_names, 
                                )
 
 

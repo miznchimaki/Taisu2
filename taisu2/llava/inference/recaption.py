@@ -54,8 +54,10 @@ def set_conv_tempalte(args: Namespace = None):
     elif args.conv_template_name in conv_templates:
         print(f"get conversation name: {args.conv_template_name}")
         set_default_conv_template(args.conv_template_name)
+        conv = conv_templates[args.conv_template_name].copy()
     else:
         raise KeyError(f"get a wrong conversation name: {args.conv_template_name}, which does not exist!")
+    args.conversation = conv
     return
 
 
@@ -198,12 +200,35 @@ def recaption(
               data_loader: DataLoader, 
               args: Namespace = None
              ):
-    # TODO: Now here
-    pass
+    eos_token_id = tokenizer.convert_tokens_to_ids(args.conv.sep.strip())
+    generation_cfg = dict()
+    if args.max_new_tokens is not None:
+        generation_cfg.update({"max_new_tokens": args.max_new_tokens})
+    elif args.max_length is not None:
+        generation_cfg.update({"max_length": args.max_length})
+    remained_cfg = dict(
+        eos_token_id=eos_token_id, 
+        min_length=args.min_length, 
+        do_sample=args.do_sample, 
+        num_beams=args.num_beams, 
+        temperature=args.temperature, 
+        top_k=args.top_k, 
+        top_p=args.top_p, 
+        repetition_penalty=args.repetition_penalty, 
+        length_penalty=args.length_penalty, 
+        num_return_sequences=args.num_return_sequences, 
+        output_attentions=args.output_attentions, 
+        output_hidden_states=args.output_hidden_states, 
+        output_scores=args.output_scores, 
+        output_logits=args.output_logits, 
+    )
+    generation_cfg.update(remained_cfg)
+    recaption_res = dict()
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
     parser.add_argument("--output-dir", type=str, default=None, help="output directory of recaption json file")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
 
@@ -256,6 +281,11 @@ def parse_args():
     parser.add_argument("--top-p", type=float, default=1.0, help="low bound of accumulated probability for top-p filtering")
     parser.add_argument("--repetition-penalty", type=float, default=1.0, help="parameter for repetition penalty, 1.0 means no penalty")
     parser.add_argument("--length-penalty", type=float, default=1.0, help="exponential penalty to the length when using beam-based generation")
+    parser.add_argument("--num-return-sequences", type=int, default=1, help="independently computed returned sequence for each element in a batch")
+    parser.add_argument("--output-attentions", type=bool, default=False, help="whether or not to return attention tensors")
+    parser.add_argument("--output-hidden-states", type=bool, default=False, help="whether or not to return hidden states of all layers")
+    parser.add_argument("--output-scores", type=bool, default=False, help="whether or not to return prediction scores")
+    parser.add_argument("--output-logits", type=bool, default=False, help="whether or not to return unprocessed logit scores")
 
     args = parser.parse_args()
     return args

@@ -151,7 +151,7 @@ def taisu2_preprocess_internvl2_5(
                                   return_tensors: Union[str | None] = "pt", 
                                   return_attention_mask: Union[bool | None] = True, 
                                   is_train: bool = True
-                                 ) -> Union[Tuple[torch.Tensor, torch.Tensor] | torch.Tensor]:
+                                 ) -> Dict[str, torch.Tensor]:
     if task_type.lower() not in TASKS_TYPE:
         raise ValueError(f"task for Taisu2 preprocessing function could only be `{TASKS_TYPE}`, but get {task_type}")
     if task_type.lower() == "caption":
@@ -289,7 +289,10 @@ def taisu2_preprocess_internvl2_5(
                       f" (ignored)"
                      )
 
-        return {"input_ids": input_ids, "labels": targets}
+        return {
+                "input_ids": input_ids, 
+                "labels": targets
+               }
 
     return {"input_ids": input_ids}
 
@@ -379,4 +382,9 @@ def taisu2_wds_map(
                     labels=labels
                    )
 
-    return dict(input_ids=input_ids, pixel_values=pixel_values)
+    # Inference/Evaluation
+    return dict(
+                input_ids=input_ids, 
+                pixel_values=pixel_values, 
+                data_name=data_stem_name
+               )
