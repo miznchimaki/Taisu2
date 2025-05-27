@@ -25,7 +25,7 @@ source $HOME/.bashrc
 conda activate xiaobao12
 cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
-echo "Begin Taisu2 image-alttext pairs recaption train at ${start_time_stamp}"
+echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}"
 
 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
@@ -108,4 +108,4 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --group_by_modality_length false \
 
 end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
-echo "End Taisu2 image-alttext pairs recaption train at ${end_time_stamp}"
+echo "End Taisu2 image-alttext pairs recaption (model train) at ${end_time_stamp}"

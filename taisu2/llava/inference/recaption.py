@@ -125,7 +125,7 @@ def create_dataloader(
                       args: Namespace = None
                      ) -> DataLoader:
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
-    output_dir = root_dir / args.tars_folder / f"{args.recaption_idx}th_recaption"
+    output_dir = root_dir / args.tars_folder / args.tars_subfolder / f"{args.recaption_idx}th_recaption"
     if output_dir.exists():
         shutil.rmtree(output_dir)
     else:
@@ -266,6 +266,13 @@ def args_save(args: Namespace = None):
 
 
 def parse_args():
+
+    def eval_arg(x):
+        try:
+            return eval(x)
+        except NameError as _:
+            return str(x)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
@@ -273,32 +280,32 @@ def parse_args():
     # dataloader params
     parser.add_argument("--num-workers", type=int, default=8, help="number workers for DataLoader")
     parser.add_argument("--batch-size", type=int, default=32, help="batch size for recaption DataLoader")
-    parser.add_argument("--pin-memory", type=bool, default=True, help="pin_memory param for DataLoader")
-    parser.add_argument("--drop-last", type=bool, default=False, help="drop_last param for DataLoader")
+    parser.add_argument("--pin-memory", type=eval_arg, default=True, help="pin_memory param for DataLoader")
+    parser.add_argument("--drop-last", type=eval_arg, default=False, help="drop_last param for DataLoader")
 
     # tokenizer params
-    parser.add_argument("--use-fast", type=bool, default=False, help="whether or not to use fast text tokenizer")
-    parser.add_argument("--trust-remote-code", type=bool, default=False, 
+    parser.add_argument("--use-fast", type=eval_arg, default=False, help="whether or not to use fast text tokenizer")
+    parser.add_argument("--trust-remote-code", type=eval_arg, default=False, 
                         help="whether or not to allow for custom defined tokenizer and model code")
-    parser.add_argument("--cache-dir", type=str, default=None, help="path where a downloaded pretrained model is cached")
+    parser.add_argument("--cache-dir", type=eval_arg, default=None, help="path where a downloaded pretrained model is cached")
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
-    parser.add_argument("--padding", type=str, default="do_not_pad", choices=("longest", "max_length", "do_not_pad"), 
+    parser.add_argument("--padding", type=eval_arg, default="do_not_pad", choices=("longest", "max_length", "do_not_pad"), 
                         help="padding strategy for text tokenizer")
-    parser.add_argument("--padding-side", type=str, default="left", choices=("left", "right"), help="padding side for text tokenizer")
-    parser.add_argument("--return-tensors", type=str, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
-    parser.add_argument("--return-attention-mask", type=bool, default=True, help="whether text tokenizer returns attention mask")
+    parser.add_argument("--padding-side", type=eval_arg, default="left", choices=("left", "right"), help="padding side for text tokenizer")
+    parser.add_argument("--return-tensors", type=eval_arg, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
+    parser.add_argument("--return-attention-mask", type=eval_arg, default=True, help="whether text tokenizer returns attention mask")
 
     # dynamic resolution params
     parser.add_argument("--base-img-size", type=int, default=448, help="base image size for dynamic resolution strategy")
     parser.add_argument("--min-subimg-num", type=int, default=1, help="minimum sub-image number for dynamic resolution")
     parser.add_argument("--max-subimg-num", type=int,default=12, help="maximum sub-image number for dynamic resolution")
-    parser.add_argument("--use-thumbnail", type=bool, default=True, help="whether using thumbnail image for dynamic resolution")
+    parser.add_argument("--use-thumbnail", type=eval_arg, default=True, help="whether using thumbnail image for dynamic resolution")
 
     # webdataset params
-    parser.add_argument("--tars-folder", type=str, default=None, help="webdataset tar file root folder")
-    parser.add_argument("--tars-subfolder", type=str, default=None, help="webdataset tar file sub-root folder")
-    parser.add_argument("--num-samples", type=int, default=None, help="number of image-alttext pairs for recaptioning in total")
-    parser.add_argument("--wds-shuffle-seed", type=int, default=None, help="random seed for webdataset shuffling")
+    parser.add_argument("--tars-folder", type=eval_arg, default=None, help="webdataset tar file root folder")
+    parser.add_argument("--tars-subfolder", type=eval_arg, default=None, help="webdataset tar file sub-root folder")
+    parser.add_argument("--num-samples", type=eval_arg, default=None, help="number of image-alttext pairs for recaptioning in total")
+    parser.add_argument("--wds-shuffle-seed", type=eval_arg, default=None, help="random seed for webdataset shuffling")
 
     # model params
     parser.add_argument("--model-name-or-path", type=str, default="OpenGVLab/InternVL3-2B", 
@@ -306,13 +313,13 @@ def parse_args():
     parser.add_argument("--data-type", type=str, choices=("bfloat16", "float16"), default="bfloat16", 
                         help="Tensor data type for model and input data")
     parser.add_argument("--mpt-attn-impl", type=str, default="triton")
-    parser.add_argument("--use-flash-attn", type=bool, default=True, help="whether model using flash atention")
+    parser.add_argument("--use-flash-attn", type=eval_arg, default=True, help="whether model using flash atention")
 
     # generation params
-    parser.add_argument("--max-length", type=int, default=None, help="maximum length for both prompt and generated tokens")
-    parser.add_argument("--max-new-tokens", type=int, default=None, help="maximum generated new tokens number")
-    parser.add_argument("--min-length", type=int, default=None, help="minimum length for both prompt and generated tokens")
-    parser.add_argument("--do-sample", type=bool, default=False, help="whether or not to use sampling generation, use greedy decoding otherwise")
+    parser.add_argument("--max-length", type=eval_arg, default=None, help="maximum length for both prompt and generated tokens")
+    parser.add_argument("--max-new-tokens", type=eval_arg, default=None, help="maximum generated new tokens number")
+    parser.add_argument("--min-length", type=eval_arg, default=None, help="minimum length for both prompt and generated tokens")
+    parser.add_argument("--do-sample", type=eval_arg, default=False, help="whether or not to use sampling generation, use greedy decoding otherwise")
     parser.add_argument("--num-beams", type=int, default=5, help="beam number for beam search based generation")
     parser.add_argument("--temperature", type=float, default=1.0, help="temperature value used for moduling generation probabilites")
     parser.add_argument("--top-k", type=int, default=50, help="highest probability tokens number for top-k filtering")
@@ -320,10 +327,10 @@ def parse_args():
     parser.add_argument("--repetition-penalty", type=float, default=1.0, help="parameter for repetition penalty, 1.0 means no penalty")
     parser.add_argument("--length-penalty", type=float, default=1.0, help="exponential penalty to the length when using beam-based generation")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="independently computed returned sequence for each element in a batch")
-    parser.add_argument("--output-attentions", type=bool, default=False, help="whether or not to return attention tensors")
-    parser.add_argument("--output-hidden-states", type=bool, default=False, help="whether or not to return hidden states of all layers")
-    parser.add_argument("--output-scores", type=bool, default=False, help="whether or not to return prediction scores")
-    parser.add_argument("--output-logits", type=bool, default=False, help="whether or not to return unprocessed logit scores")
+    parser.add_argument("--output-attentions", type=eval_arg, default=False, help="whether or not to return attention tensors")
+    parser.add_argument("--output-hidden-states", type=eval_arg, default=False, help="whether or not to return hidden states of all layers")
+    parser.add_argument("--output-scores", type=eval_arg, default=False, help="whether or not to return prediction scores")
+    parser.add_argument("--output-logits", type=eval_arg, default=False, help="whether or not to return unprocessed logit scores")
 
     args = parser.parse_args()
     return args
