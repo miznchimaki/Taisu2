@@ -53,7 +53,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --dynamic_resolution true \
           --base_img_size 448 \
           --min_subimg_num 1 \
-          --max_subimg_num 12 \
+          --max_subimg_num 9 \
           --use_thumbnail true \
           --padding do_not_pad \
           --padding_side right \
@@ -64,6 +64,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_nsamples_per_epoch 5856804 \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
+          --wds_worker_remained_data true \
           --txts_separator "\n" \
           --per_device_train_batch_size 4 \
           --gradient_accumulation_steps 1 \
@@ -73,10 +74,10 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --learning_rate 5e-5 \
           --weight_decay 0 \
           --warmup_ratio 0.0 \
-          --output_dir "$HOME/outputs/Taisu2/debug" \
+          --output_dir "$HOME/outputs/Taisu2/debuggg" \
           --cache_dir "" \
           --wandb_project "Taisu2" \
-          --run_name "debug" \
+          --run_name "debuggg" \
           --bf16 true \
           --tf32 true \
           --save_total_limit 1 \
@@ -89,6 +90,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --adam_epsilon 1e-8 \
           --max_grad_norm 1 \
           --dataloader_pin_memory true \
+          --dataloader_drop_last false \
           --dataloader_num_workers 8 \
           --dataloader_persistent_worker true \
           --remove_unused_columns false \

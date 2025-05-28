@@ -227,15 +227,24 @@ def taisu2_preprocess_internvl2_5(
             prompt_str = random.choice(two_caption_prompts)
             user_prompt = prompt_str.format(native_caption=native_caption)
             conv.append_message(roles[0], "<image>\n" + user_prompt)
-            conv.append_message(roles[1], re_caption)
+            if is_train:
+                conv.append_message(roles[1], re_caption)
+            else:
+                conv.append_message(roles[1], None)
         if native_caption and (not re_caption):
             user_prompt = random.choice(native_caption_prompts)
             conv.append_message(roles[0], "<image>\n" + user_prompt)
-            conv.append_message(roles[1], native_caption)
+            if is_train:
+                conv.append_message(roles[1], native_caption)
+            else:
+                conv.append_message(roles[1], None)
         if (not native_caption) and re_caption:
             user_prompt = random.choice(re_caption_prompts)
             conv.append_message(roles[0], "<image>\n" + user_prompt)
-            conv.append_message(roles[1], re_caption)
+            if is_train:
+                conv.append_message(roles[1], re_caption)
+            else:
+                conv.append_message(roles[1], None)
         conv_prompt = conv.get_prompt()
 
     if isinstance(sub_img_num, int):

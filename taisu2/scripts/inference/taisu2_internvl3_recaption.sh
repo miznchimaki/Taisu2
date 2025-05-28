@@ -23,15 +23,15 @@ deepspeed --include localhost:3 --master_port ${MASTER_PORT} \
           ./llava/inference/recaption.py --recaption-idx 1 \
                                          --conv-template-name internvl2_5 \
                                          --num-workers 8 \
-                                         --batch-size 32 \
+                                         --batch-size 64 \
                                          --pin-memory True \
-                                         --drop-last True \
+                                         --drop-last False \
                                          --use-fast False \
-                                         --trust-remote-code True \
+                                         --trust-remote-code False \
                                          --cache-dir None \
                                          --model-max-length 12288 \
-                                         --padding None \
-                                         --padding-side None \
+                                         --padding do_not_pad \
+                                         --padding-side left \
                                          --return-tensors None \
                                          --return-attention-mask None \
                                          --base-img-size 448 \
@@ -40,7 +40,7 @@ deepspeed --include localhost:3 --master_port ${MASTER_PORT} \
                                          --use-thumbnail True \
                                          --tars-folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
                                          --tars-subfolder rename_and_rearchive \
-                                         --num-samples 5856804 \
+                                         --total-samples 5856804 \
                                          --wds-shuffle-seed None \
                                          --model-name-or-path ${MODEL_NAME_OR_PATH} \
                                          --data-type bfloat16 \

@@ -15,6 +15,7 @@
 #    limitations under the License.
 
 import os
+import math
 import copy
 from dataclasses import dataclass, field
 import json
@@ -95,6 +96,7 @@ class DataArguments:
     wds_nsamples_per_epoch: Optional[int] = field(default=None)
     wds_last_batch: Optional[bool] = field(default=True)
     wds_shuffle_seed: Optional[int] = field(default=42)
+    wds_worker_remained_data: Optional[bool] = field(default=True)
     # data arguments for image-text preprocessing
     txts_separator: Optional[str] = field(default="\n")
 
@@ -933,12 +935,12 @@ class DataCollatorForWebDataset(object):
                  img_text_data: Sequence[Dict]
                 ) -> WdsCollatorOutput:
         native_input_ids = [data["input_ids"] for data in img_text_data]
-        batch_input_ids = torch.nn.utils.rnn.pad_sequence(
-                                                          native_input_ids, 
-                                                          batch_first=True, 
-                                                          padding_value=self.pad_token_id
-                                                         )
         if self.is_train:
+            batch_input_ids = torch.nn.utils.rnn.pad_sequence(
+                                                              native_input_ids, 
+                                                              batch_first=True, 
+                                                              padding_value=self.pad_token_id
+                                                             )
             batch_labels = (data["labels"] for data in img_text_data)
             batch_labels = torch.nn.utils.rnn.pad_sequence(
                                                            list(batch_labels), 
@@ -946,13 +948,18 @@ class DataCollatorForWebDataset(object):
                                                            padding_value=IGNORE_INDEX
                                                           )
         else:
-            max_input_len = batch_input_ids.shape[-1]
-            native_attn_mask = []
+            max_input_len = max(native_ids.shape[0] for native_ids in native_input_ids)
+            batch_attn_mask = []
+            batch_input_ids = []
             for input_ids in native_input_ids:
                 attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device, requires_grad=False)
                 pad_mask = torch.zeros((max_input_len - input_ids.shape[0], ), dtype=torch.long, device=input_ids.device, requires_grad=False)
-                native_attn_mask.append(torch.cat((pad_mask, attn_mask), dim=0))
-            batch_attn_mask = torch.stack(native_attn_mask, dim=0)
+                batch_attn_mask.append(torch.cat((pad_mask, attn_mask), dim=0))
+
+                pad_input_ids = torch.full((max_input_len - input_ids.shape[0], ), self.pad_token_id, dtype=input_ids.dtype, device=input_ids.device)
+                batch_input_ids.append(torch.cat((pad_input_ids, input_ids), dim=0))
+            batch_attn_mask = torch.stack(batch_attn_mask, dim=0)
+            batch_input_ids = torch.stack(batch_input_ids, dim=0)
             batch_names = [data["data_name"] for data in img_text_data]
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
         if batch_no_imgs:
@@ -990,7 +997,8 @@ class DataCollatorForWebDataset(object):
 
 def make_wds_data_module(
                          tokenizer: transformers.PreTrainedTokenizer, 
-                         data_args: DataArguments = None
+                         num_workers: int = None, 
+                         data_args: DataArguments = None, 
                         ) -> Dict:
     """Make training and evaluation webdataset iterable for pretraining & supervised fine-tuning"""
     data_root_dir = pathlib.Path(os.getenv("HOME", "")) / "datasets" / "Taisu2_datasets"
@@ -1015,9 +1023,31 @@ def make_wds_data_module(
     wds_train_map = partial(taisu2_wds_map, is_train=True, tokenizer=tokenizer, data_args=data_args)
     wds_train_pipeline.append(wds.map(wds_train_map))
     train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
-    if data_args.wds_nsamples_per_epoch:
-        train_web_dataset.with_epoch(nsamples=data_args.wds_nsamples_per_epoch)
-        train_web_dataset.with_length(data_args.wds_nsamples_per_epoch)
+
+    if data_args.wds_nsamples_per_epoch is None or (not isinstance(data_args.wds_nsamples_per_epoch, int)):
+        raise RuntimeError(f"when training via webdataset, the total sample number must be specified by user")
+    world_size = int(os.getenv("WORLD_SIZE", None))
+    if not data_args.wds_worker_remained_data:
+        if num_workers:
+            total_data_per_worker = math.floor(data_args.wds_nsamples_per_epoch / (world_size * num_workers))
+        else:
+            total_data_per_worker = math.floor(data_args.wds_nsamples_per_epoch / world_size)
+    else:
+        if num_workers:
+            total_data_per_worker = math.ceil(data_args.wds_nsamples_per_epoch / (world_size * num_workers))
+        else:
+            total_data_per_worker = math.ceil(data_args.wds_nsamples_per_epoch / world_size)
+    data_args.total_data_per_worker = total_data_per_worker
+    if num_workers:
+        total_data_per_rank = total_data_per_worker * num_workers
+    else:
+        total_data_per_rank = total_data_per_worker
+    total_data_all_rank = total_data_per_rank * world_size
+    data_args.total_data_per_rank = total_data_per_rank
+    data_args.total_data_all_rank = total_data_all_rank
+
+    train_web_dataset.with_epoch(nsamples=total_data_per_worker)
+    train_web_dataset.with_length(n=total_data_all_rank)
 
     wds_collator = DataCollatorForWebDataset(
                                              tokenizer=tokenizer, 
@@ -1313,7 +1343,8 @@ def train(attn_implementation=None):
     if data_args.wds_shards_folder:
         data_module = make_wds_data_module(
                                            tokenizer=tokenizer, 
-                                           data_args=data_args
+                                           data_args=data_args, 
+                                           num_workers=training_args.dataloader_num_workers
                                           )
     else:
         data_module = make_supervised_data_module(

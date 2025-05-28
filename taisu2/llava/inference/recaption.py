@@ -47,7 +47,7 @@ def init_distributed(args: Namespace = None):
     num_gpu_per_node = torch.cuda.device_count()
     args.rank = str(os.environ["RANK"])
     args.world_size = str(os.environ["WORLD_SIZE"])
-    args.local_rank = str(int(args.rank) & num_gpu_per_node)
+    args.local_rank = str(int(args.rank) % num_gpu_per_node)
     torch.distributed.init_process_group(
                                          backend="nccl", 
                                          init_method="env://", 
@@ -59,15 +59,15 @@ def init_distributed(args: Namespace = None):
     return
 
 
-class TokenizerAndModelOutput(TypedDict):
+class TokenizerAndModel(TypedDict):
     tokenizer: transformers.PreTrainedTokenizer
     model: transformers.PreTrainedModel
 
 
-def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutput:
+def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModel:
     model_name_or_path = args.model_name_or_path
     mpt_flag = "mpt" in model_name_or_path
-    internvl_flag = "internvl2_5" in model_name_or_path or "internvl3" in model_name_or_path
+    internvl_flag = "internvl2_5" in model_name_or_path.lower() or "internvl3" in model_name_or_path.lower()
     tokenizer = AutoTokenizer.from_pretrained(
                                               model_name_or_path, 
                                               use_fast=args.use_fast, 
@@ -79,7 +79,7 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutpu
         tokenizer.pad_token = tokenizer.unk_token
         tokenizer.pad_token_id = tokenizer.unk_token_id
 
-    device_map = {"": f"cuda:{args.local_rank}"}
+    cuda_device_str = f"cuda:{args.local_rank}"
     if not internvl_flag:
         if "mpt" in model_name_or_path:
             config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
@@ -89,16 +89,14 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutpu
                                                         model_name_or_path, 
                                                         config=config, 
                                                         cache_dir=args.cache_dir, 
-                                                        device_map=device_map, 
-                                                       )
+                                                       ).to(device=cuda_device_str)
         else:
             model = LlavaLlamaForCausalLM.from_pretrained(
                                                           model_name_or_path, 
                                                           cache_dir=args.cache_dir, 
                                                           torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
                                                           attn_implementation="flash_attention_2" if args.use_flash_attn else None, 
-                                                          device_map=device_map, 
-                                                         )
+                                                         ).to(device=cuda_device_str)
     else:
         img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
         model = InternVLChatModel.from_pretrained(
@@ -107,8 +105,7 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModelOutpu
                                                   trust_remote_code=args.trust_remote_code, 
                                                   use_flash_attn=args.use_flash_attn, 
                                                   torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
-                                                  device_map=device_map, 
-                                                 )
+                                                 ).to(device=cuda_device_str)
         model.img_context_token_id = img_context_token_id
         args.context_token_per_img = model.num_image_token
     model.eval()
@@ -135,6 +132,9 @@ def create_dataloader(
     if not tars_p.exists():
         raise FileNotFoundError(f"tar files directory - {tars_p}, does not exist!")
 
+    if args.drop_last:
+        raise ValueError(f"when doing inference for recaption, no data should be discarded, not even single one")
+
     def get_first_and_last_tarname() -> Tuple[str, str]:
         tar_names = sorted(os.listdir(tars_p))
         return tar_names[0].split(".")[0], tar_names[-1].split(".")[0]
@@ -152,9 +152,17 @@ def create_dataloader(
     recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, data_args=args)
     wds_pipeline.append(wds.map(recaption_map_func))
     recaption_wds = wds.DataPipeline(*wds_pipeline)
-    assert args.num_samples is not None, f"number of samples for dataset based on webdataset must be applied!"
-    recaption_wds.with_epoch(nsamples=args.num_samples)
-    recaption_wds.with_length(n=args.num_samples)
+
+    assert args.total_samples is not None, f"number of samples for dataset based on webdataset must be applied!"
+    if args.num_workers:
+        total_samples_per_worker = math.ceil(args.total_samples / (args.world_size * args.num_workers))
+    else:
+        total_samples_per_worker = math.ceil(args.total_samples / args.world_size)
+    total_samples_per_rank = total_samples_per_worker * args.num_workers
+    args.total_samples_per_worker = total_samples_per_worker
+    args.total_samples_per_rank = total_samples_per_rank
+    recaption_wds.with_epoch(nsamples=total_samples_per_worker)
+    recaption_wds.with_length(n=total_samples_per_rank)
 
     recaption_data_collator = DataCollatorForWebDataset(
                                                         tokenizer=tokenizer, 
@@ -172,9 +180,9 @@ def create_dataloader(
                              pin_memory=args.pin_memory, 
                              drop_last=args.drop_last
                             )
-    batch_num = math.ceil(args.num_samples // args.batch_size)
-    batch_num_per_rank = batch_num // args.world_size
-    args.batch_num = batch_num
+    batch_num_per_rank = math.ceil(total_samples_per_rank / args.batch_size)
+    total_batch_num = batch_num_per_rank * args.world_size
+    args.total_batch_num = total_batch_num
     args.batch_num_per_rank = batch_num_per_rank
     return data_loader
 
@@ -193,6 +201,7 @@ def recaption(
     elif args.max_length is not None:
         generation_cfg.update({"max_length": args.max_length})
     remained_cfg = dict(
+        pad_token_id=eos_token_id, 
         eos_token_id=eos_token_id, 
         min_length=args.min_length, 
         do_sample=args.do_sample, 
@@ -219,9 +228,9 @@ def recaption(
         attention_mask: torch.LongTensor = batch_data["attention_mask"]
         data_names: List[str] = batch_data["data_names"]
         batch_recaption: torch.Tensor = model.generate(
-                                                       pixel_values=pixel_values, 
-                                                       input_ids=input_ids, 
-                                                       attention_mask=attention_mask, 
+                                                       pixel_values=pixel_values.to(dtype=model.dtype, device=model.device), 
+                                                       input_ids=input_ids.to(device=model.device), 
+                                                       attention_mask=attention_mask.to(device=model.device), 
                                                        **generation_cfg
                                                       )
         recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
@@ -276,6 +285,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
+    parser.add_argument("--local-rank", "--local_rank", dest="local_rank", type=int, default=None, 
+                        help="remained argument for distribution")
 
     # dataloader params
     parser.add_argument("--num-workers", type=int, default=8, help="number workers for DataLoader")
@@ -289,10 +300,10 @@ def parse_args():
                         help="whether or not to allow for custom defined tokenizer and model code")
     parser.add_argument("--cache-dir", type=eval_arg, default=None, help="path where a downloaded pretrained model is cached")
     parser.add_argument("--model-max-length", type=int, default=12288, help="maximum length for tokenizer and model")
-    parser.add_argument("--padding", type=eval_arg, default="do_not_pad", choices=("longest", "max_length", "do_not_pad"), 
+    parser.add_argument("--padding", type=eval_arg, default="do_not_pad", choices=("longest", "max_length", "do_not_pad", None), 
                         help="padding strategy for text tokenizer")
     parser.add_argument("--padding-side", type=eval_arg, default="left", choices=("left", "right"), help="padding side for text tokenizer")
-    parser.add_argument("--return-tensors", type=eval_arg, default=None, choices=("tf", "pt", "np"), help="returned tensors type for text tokenizer")
+    parser.add_argument("--return-tensors", type=eval_arg, default=None, choices=("tf", "pt", "np", None), help="returned tensors type for text tokenizer")
     parser.add_argument("--return-attention-mask", type=eval_arg, default=True, help="whether text tokenizer returns attention mask")
 
     # dynamic resolution params
@@ -302,15 +313,15 @@ def parse_args():
     parser.add_argument("--use-thumbnail", type=eval_arg, default=True, help="whether using thumbnail image for dynamic resolution")
 
     # webdataset params
-    parser.add_argument("--tars-folder", type=eval_arg, default=None, help="webdataset tar file root folder")
+    parser.add_argument("--tars-folder", type=str, default=None, help="webdataset tar file root folder")
     parser.add_argument("--tars-subfolder", type=eval_arg, default=None, help="webdataset tar file sub-root folder")
-    parser.add_argument("--num-samples", type=eval_arg, default=None, help="number of image-alttext pairs for recaptioning in total")
+    parser.add_argument("--total-samples", type=eval_arg, default=None, help="number of image-alttext pairs for recaptioning in total")
     parser.add_argument("--wds-shuffle-seed", type=eval_arg, default=None, help="random seed for webdataset shuffling")
 
     # model params
     parser.add_argument("--model-name-or-path", type=str, default="OpenGVLab/InternVL3-2B", 
                         help="model remote repository name or local directory")
-    parser.add_argument("--data-type", type=str, choices=("bfloat16", "float16"), default="bfloat16", 
+    parser.add_argument("--data-type", type=str, choices=("float32", "bfloat16", "float16"), default="bfloat16", 
                         help="Tensor data type for model and input data")
     parser.add_argument("--mpt-attn-impl", type=str, default="triton")
     parser.add_argument("--use-flash-attn", type=eval_arg, default=True, help="whether model using flash atention")
@@ -341,8 +352,8 @@ if __name__ == "__main__":
     set_conv_tempalte(args=args)
     init_distributed(args=args)
 
-    create_res = create_tokenizer_and_model(args=args)
-    tokenizer = create_res["tokenizer"]; model = create_res["model"]
+    tokenizer_and_model = create_tokenizer_and_model(args=args)
+    tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
     data_loader = create_dataloader(tokenizer, args=args)
 
     recaption(tokenizer, model, data_loader, args=args)
