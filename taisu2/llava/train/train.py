@@ -1047,7 +1047,7 @@ def make_wds_data_module(
     data_args.total_data_all_rank = total_data_all_rank
 
     train_web_dataset.with_epoch(nsamples=total_data_per_worker)
-    train_web_dataset.with_length(n=total_data_all_rank)
+    train_web_dataset.with_length(n=total_data_all_rank, silent=True)
 
     wds_collator = DataCollatorForWebDataset(
                                              tokenizer=tokenizer, 

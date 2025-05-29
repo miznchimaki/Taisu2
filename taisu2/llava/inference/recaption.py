@@ -26,21 +26,6 @@ from llava.taisu2_preprocess import taisu2_wds_map
 from llava.train import DataCollatorForWebDataset
 
 
-def set_conv_tempalte(args: Namespace = None):
-    if args.conv_template_name is None:
-        print(f"conversation template name is None, set conversation tempalte to the default one")
-        from llava.conversation import default_conversation
-        conv = default_conversation.copy()
-    elif args.conv_template_name in conv_templates:
-        print(f"get conversation name: {args.conv_template_name}")
-        set_default_conv_template(args.conv_template_name)
-        conv = conv_templates[args.conv_template_name].copy()
-    else:
-        raise KeyError(f"get a wrong conversation name: {args.conv_template_name}, which does not exist!")
-    args.conversation = conv
-    return
-
-
 def init_distributed(args: Namespace = None):
     if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
         raise KeyError(f"either environmental variables `RANK` or `WORLD_SIZE` does not exist, cannot execute DDP initialization normally")
@@ -54,8 +39,26 @@ def init_distributed(args: Namespace = None):
                                          world_size=int(args.world_size), 
                                          rank=int(args.rank)
                                         )
-    print(f"DDP initialized completed at process with rank {args.rank}")
     torch.distributed.barrier()
+    if int(args.rank) == 0:
+        print(f"DDP initialization finished for {args.world_size} processes")
+    return
+
+
+def set_conv_tempalte(args: Namespace = None):
+    if args.conv_template_name is None:
+        if int(args.rank) == 0:
+            print(f"conversation template name is None, set conversation tempalte to the default one")
+        from llava.conversation import default_conversation
+        conv = default_conversation.copy()
+    elif args.conv_template_name in conv_templates:
+        if int(args.rank) == 0:
+            print(f"get conversation name: {args.conv_template_name}")
+        set_default_conv_template(args.conv_template_name)
+        conv = conv_templates[args.conv_template_name].copy()
+    else:
+        raise KeyError(f"get a wrong conversation name: {args.conv_template_name}, which does not exist!")
+    args.conversation = conv
     return
 
 
@@ -123,9 +126,9 @@ def create_dataloader(
                      ) -> DataLoader:
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
     output_dir = root_dir / args.tars_folder / args.tars_subfolder / f"{args.recaption_idx}th_recaption"
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    else:
+    if int(args.rank) == 0:
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
         output_dir.mkdir(parents=True, exist_ok=False)
     args.output_dir = str(output_dir)
     tars_p = root_dir / args.tars_folder / args.tars_subfolder / "image-text-pairs"
@@ -155,14 +158,14 @@ def create_dataloader(
 
     assert args.total_samples is not None, f"number of samples for dataset based on webdataset must be applied!"
     if args.num_workers:
-        total_samples_per_worker = math.ceil(args.total_samples / (args.world_size * args.num_workers))
+        total_samples_per_worker = math.ceil(args.total_samples / (int(args.world_size) * args.num_workers))
     else:
-        total_samples_per_worker = math.ceil(args.total_samples / args.world_size)
+        total_samples_per_worker = math.ceil(args.total_samples / int(args.world_size))
     total_samples_per_rank = total_samples_per_worker * args.num_workers
     args.total_samples_per_worker = total_samples_per_worker
     args.total_samples_per_rank = total_samples_per_rank
     recaption_wds.with_epoch(nsamples=total_samples_per_worker)
-    recaption_wds.with_length(n=total_samples_per_rank)
+    recaption_wds.with_length(n=total_samples_per_rank, silent=True)
 
     recaption_data_collator = DataCollatorForWebDataset(
                                                         tokenizer=tokenizer, 
@@ -181,7 +184,7 @@ def create_dataloader(
                              drop_last=args.drop_last
                             )
     batch_num_per_rank = math.ceil(total_samples_per_rank / args.batch_size)
-    total_batch_num = batch_num_per_rank * args.world_size
+    total_batch_num = batch_num_per_rank * int(args.world_size)
     args.total_batch_num = total_batch_num
     args.batch_num_per_rank = batch_num_per_rank
     return data_loader
@@ -218,11 +221,15 @@ def recaption(
         output_logits=args.output_logits, 
     )
     generation_cfg.update(remained_cfg)
-    recaption_res = dict() # per rank recaption result dictionary
+    recaption_res = dict() # per rank recaption result
     recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
     recaption_p.unlink(missing_ok=True)
 
-    for batch_idx, batch_data in enumerate(tqdm(data_loader, desc=f"{args.recaption_idx}th_recaption", total=args.batch_num_per_rank, disable=args.rank != 0)):
+    for batch_idx, batch_data in enumerate(tqdm(data_loader, 
+                                                desc=f"{args.recaption_idx}th_recaption", 
+                                                total=args.batch_num_per_rank + 1, 
+                                                disable=int(args.rank) != 0, 
+                                                dynamic_ncols=True)):
         pixel_values: torch.Tensor = batch_data["pixel_values"]
         input_ids: torch.LongTensor = batch_data["input_ids"]
         attention_mask: torch.LongTensor = batch_data["attention_mask"]
@@ -269,6 +276,7 @@ def recaption_res_aggregation(args: Namespace = None):
 def args_save(args: Namespace = None):
     args_p = Path(args.output_dir) / "arguments.json"
     args_dict = vars(args)
+    _ = args_dict.pop("conversation")
     with open(args_p, mode="w", encoding="utf-8") as args_fp:
         json.dump(args_dict, args_fp, ensure_ascii=False)
     return
@@ -349,13 +357,14 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    set_conv_tempalte(args=args)
     init_distributed(args=args)
+    set_conv_tempalte(args=args)
 
     tokenizer_and_model = create_tokenizer_and_model(args=args)
     tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
     data_loader = create_dataloader(tokenizer, args=args)
 
     recaption(tokenizer, model, data_loader, args=args)
-    recaption_res_aggregation(args=args)
-    args_save(args=args)
+    if int(args.rank) == 0:
+        recaption_res_aggregation(args=args)
+        args_save(args=args)
