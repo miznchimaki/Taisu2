@@ -12,6 +12,7 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
+import deepspeed
 import transformers
 from transformers import AutoConfig, AutoTokenizer
 import webdataset as wds
@@ -33,13 +34,13 @@ def init_distributed(args: Namespace = None):
     args.rank = str(os.environ["RANK"])
     args.world_size = str(os.environ["WORLD_SIZE"])
     args.local_rank = str(int(args.rank) % num_gpu_per_node)
-    torch.distributed.init_process_group(
-                                         backend="nccl", 
-                                         init_method="env://", 
-                                         world_size=int(args.world_size), 
-                                         rank=int(args.rank)
-                                        )
-    torch.distributed.barrier()
+    deepspeed.init_distributed(
+                               dist_backend="nccl", 
+                               init_method="env://", 
+                               rank=int(args.rank), 
+                               world_size=int(args.world_size), 
+                              )
+
     if int(args.rank) == 0:
         print(f"DDP initialization finished for {args.world_size} processes")
     return
@@ -159,9 +160,10 @@ def create_dataloader(
     assert args.total_samples is not None, f"number of samples for dataset based on webdataset must be applied!"
     if args.num_workers:
         total_samples_per_worker = math.ceil(args.total_samples / (int(args.world_size) * args.num_workers))
+        total_samples_per_rank = total_samples_per_worker * args.num_workers
     else:
         total_samples_per_worker = math.ceil(args.total_samples / int(args.world_size))
-    total_samples_per_rank = total_samples_per_worker * args.num_workers
+        total_samples_per_rank = total_samples_per_worker
     args.total_samples_per_worker = total_samples_per_worker
     args.total_samples_per_rank = total_samples_per_rank
     recaption_wds.with_epoch(nsamples=total_samples_per_worker)
