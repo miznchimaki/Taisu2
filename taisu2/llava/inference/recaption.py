@@ -4,10 +4,9 @@ import math
 import os
 import shutil
 import json
-import torch.distributed
 from tqdm import tqdm
 from functools import partial
-from typing import Tuple, TypedDict, List
+from typing import Union, Tuple, TypedDict, List
 from pathlib import Path
 
 import torch
@@ -15,6 +14,7 @@ from torch.utils.data import DataLoader
 import deepspeed
 import transformers
 from transformers import AutoConfig, AutoTokenizer
+from transformers.utils import ModelOutput
 import webdataset as wds
 from llava.constants import SHARD_SHUFFLE_BUFSIZE, SHARD_SHUFFLE_INITIAL
 from llava.constants import SAMPLE_SHUFFLE_BUFSIZE, SAMPLE_SHUFFLE_INITIAL
@@ -217,6 +217,7 @@ def recaption(
         repetition_penalty=args.repetition_penalty, 
         length_penalty=args.length_penalty, 
         num_return_sequences=args.num_return_sequences, 
+        return_dict_in_generate=args.return_dict_in_generate, 
         output_attentions=args.output_attentions, 
         output_hidden_states=args.output_hidden_states, 
         output_scores=args.output_scores, 
@@ -232,17 +233,21 @@ def recaption(
                                                 total=args.batch_num_per_rank + 1, 
                                                 disable=int(args.rank) != 0, 
                                                 dynamic_ncols=True)):
-        pixel_values: torch.Tensor = batch_data["pixel_values"]
-        input_ids: torch.LongTensor = batch_data["input_ids"]
-        attention_mask: torch.LongTensor = batch_data["attention_mask"]
+        pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
+        input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
+        attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
         data_names: List[str] = batch_data["data_names"]
-        batch_recaption: torch.Tensor = model.generate(
-                                                       pixel_values=pixel_values.to(dtype=model.dtype, device=model.device), 
-                                                       input_ids=input_ids.to(device=model.device), 
-                                                       attention_mask=attention_mask.to(device=model.device), 
-                                                       **generation_cfg
-                                                      )
-        recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
+        print(f"data names: {data_names}")
+        batch_recaption: Union[torch.Tensor | ModelOutput] = model.generate(
+                                                                            pixel_values=pixel_values, 
+                                                                            input_ids=input_ids, 
+                                                                            attention_mask=attention_mask, 
+                                                                            **generation_cfg
+                                                                           )
+        if args.return_dict_in_generate:
+            recaption_strs = tokenizer.batch_decode(batch_recaption["sequences"], skip_special_tokens=True)
+        else:
+            recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
         if len(data_names) != len(recaption_strs):
             raise ValueError(f"the {batch_idx}th batch on process with rank {args.rank} encounter a length inequality "
                              f"between input data_names({len(data_names)}) and outupt recaption strings ({len(recaption_strs)})!")
@@ -348,6 +353,7 @@ def parse_args():
     parser.add_argument("--repetition-penalty", type=float, default=1.0, help="parameter for repetition penalty, 1.0 means no penalty")
     parser.add_argument("--length-penalty", type=float, default=1.0, help="exponential penalty to the length when using beam-based generation")
     parser.add_argument("--num-return-sequences", type=int, default=1, help="independently computed returned sequence for each element in a batch")
+    parser.add_argument("--return-dict-in-generate", type=eval_arg, default=False, help="whether or not to return a ModelOutput")
     parser.add_argument("--output-attentions", type=eval_arg, default=False, help="whether or not to return attention tensors")
     parser.add_argument("--output-hidden-states", type=eval_arg, default=False, help="whether or not to return hidden states of all layers")
     parser.add_argument("--output-scores", type=eval_arg, default=False, help="whether or not to return prediction scores")
