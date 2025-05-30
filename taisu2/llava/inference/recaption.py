@@ -112,7 +112,7 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModel:
                                                  ).to(device=cuda_device_str)
         model.img_context_token_id = img_context_token_id
         args.context_token_per_img = model.num_image_token
-    model.eval()
+    model = model.eval()
     model.config.use_cache = False
 
     return dict(
@@ -237,7 +237,6 @@ def recaption(
         input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
         attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
         data_names: List[str] = batch_data["data_names"]
-        print(f"data names: {data_names}")
         batch_recaption: Union[torch.Tensor | ModelOutput] = model.generate(
                                                                             pixel_values=pixel_values, 
                                                                             input_ids=input_ids, 
