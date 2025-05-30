@@ -39,7 +39,7 @@ deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
                                          --max-subimg-num 12 \
                                          --use-thumbnail True \
                                          --tars-folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
-                                         --tars-subfolder debug \
+                                         --tars-subfolder rename_and_rearchive \
                                          --total-samples 5856804 \
                                          --wds-shuffle-seed None \
                                          --model-name-or-path ${MODEL_NAME_OR_PATH} \
