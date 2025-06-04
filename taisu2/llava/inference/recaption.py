@@ -158,7 +158,14 @@ def create_dataloader(
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
     # TODO: Debug of wds.DataPipeline.with_epoch
-    recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, output_dir=str(output_dir), data_args=args)
+    recaption_map_func = partial(
+                                 taisu2_wds_map, 
+                                 is_train=False, 
+                                 inference_recaption=True, 
+                                 tokenizer=tokenizer, 
+                                 output_dir=str(output_dir), 
+                                 data_args=args
+                                )
     wds_pipeline.append(wds.map(recaption_map_func))
     recaption_wds = wds.DataPipeline(*wds_pipeline)
 
