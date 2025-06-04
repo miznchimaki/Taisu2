@@ -23,7 +23,7 @@ deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
           ./llava/inference/recaption.py --recaption-idx 1 \
                                          --conv-template-name internvl2_5 \
                                          --num-workers 8 \
-                                         --batch-size 160 \
+                                         --batch-size 140 \
                                          --pin-memory True \
                                          --drop-last False \
                                          --use-fast False \
