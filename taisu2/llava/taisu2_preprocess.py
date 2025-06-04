@@ -195,9 +195,9 @@ def taisu2_preprocess_internvl2_5(
         two_caption_prompts = all_prompts[all_prompts.index("native_and_recaption_prompts:") + 1: ]
 
         pat_strs = (
-                    r"(\<\|native_caption_start\|>)([\s\S]*)(\<\|native_caption_end\|>)", 
-                    r"(\<\|recaption_start\|>)([\s\S]*)(\<\|recaption_end\|>)", 
-                    r"(\<\|native_caption_start\|>)([\s\S]*)(\<\|native_caption_end\|>)(\<\|recaption_start\|>)([\s\S]*)(\<\|recaption_end\|>)"
+                    r"(<\|native_caption_start\|>)([\s\S]*)(<\|native_caption_end\|>)", 
+                    r"(<\|recaption_start\|>)([\s\S]*)(<\|recaption_end\|>)", 
+                    r"(<\|native_caption_start\|>)([\s\S]*)(<\|native_caption_end\|>)(<\|recaption_start\|>)([\s\S]*)(<\|recaption_end\|>)"
                    )
         native_caption = None
         re_caption = None
