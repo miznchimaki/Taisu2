@@ -4,7 +4,6 @@ import math
 import os
 import shutil
 import json
-import torch.distributed
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -154,7 +153,13 @@ def create_dataloader(
     wds_pipeline.append(tarfile_to_samples())
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
-    recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, data_args=args)
+    recaption_map_func = partial(
+                                 taisu2_wds_map, 
+                                 is_train=False, 
+                                 inference_recaption=True, 
+                                 tokenizer=tokenizer, 
+                                 data_args=args
+                                )
     wds_pipeline.append(wds.map(recaption_map_func))
     recaption_wds = wds.DataPipeline(*wds_pipeline)
 

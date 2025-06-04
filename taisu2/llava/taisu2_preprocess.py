@@ -381,7 +381,13 @@ def taisu2_wds_map(
         pixel_values = torch.cat(imgs_list, dim=0)
     data_stem_name = wds_sample["__key__"]
 
-    wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, inference_recaption=inference_recaption, tokenizer=tokenizer, data_args=data_args)
+    wds_text_map = partial(
+                           taisu2_text_preprocess, 
+                           is_train=is_train, 
+                           inference_recaption=inference_recaption, 
+                           tokenizer=tokenizer, 
+                           data_args=data_args
+                          )
     if isinstance(wds_sample["txt"], bytes):
         src_txt = wds_sample["txt"].decode(encoding="utf-8")
     else:
