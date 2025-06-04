@@ -150,7 +150,8 @@ def taisu2_preprocess_internvl2_5(
                                   padding_side: Union[str | None] = "right", 
                                   return_tensors: Union[str | None] = "pt", 
                                   return_attention_mask: Union[bool | None] = True, 
-                                  is_train: bool = True
+                                  is_train: bool = True, 
+                                  inference_recaption: bool = False, 
                                  ) -> Dict[str, torch.Tensor]:
     if task_type.lower() not in TASKS_TYPE:
         raise ValueError(f"task for Taisu2 preprocessing function could only be `{TASKS_TYPE}`, but get {task_type}")
@@ -217,28 +218,35 @@ def taisu2_preprocess_internvl2_5(
             native_caption = anns
         if (not native_caption) and re_caption is None:
             raise ValueError(f"image-alttext pairs with stem name {data_stem_name} does not have an effective native caption and re-caption")
-        if native_caption and re_caption:
-            prompt_str = random.choice(two_caption_prompts)
-            user_prompt = prompt_str.format(native_caption=native_caption)
-            conv.append_message(roles[0], "<image>\n" + user_prompt)
-            if is_train:
-                conv.append_message(roles[1], re_caption)
-            else:
-                conv.append_message(roles[1], None)
-        if native_caption and (not re_caption):
-            user_prompt = random.choice(native_caption_prompts)
-            conv.append_message(roles[0], "<image>\n" + user_prompt)
-            if is_train:
-                conv.append_message(roles[1], native_caption)
-            else:
-                conv.append_message(roles[1], None)
-        if (not native_caption) and re_caption:
+        if inference_recaption:
+            if not native_caption:
+                raise ValueError(f"during the recaption inference phase, native caption must be provided")
             user_prompt = random.choice(re_caption_prompts)
             conv.append_message(roles[0], "<image>\n" + user_prompt)
-            if is_train:
-                conv.append_message(roles[1], re_caption)
-            else:
-                conv.append_message(roles[1], None)
+            conv.append_message(roles[1], None)
+        else:
+            if native_caption and re_caption:
+                prompt_str = random.choice(two_caption_prompts)
+                user_prompt = prompt_str.format(native_caption=native_caption)
+                conv.append_message(roles[0], "<image>\n" + user_prompt)
+                if is_train:
+                    conv.append_message(roles[1], re_caption)
+                else:
+                    conv.append_message(roles[1], None)
+            if native_caption and (not re_caption):
+                user_prompt = random.choice(native_caption_prompts)
+                conv.append_message(roles[0], "<image>\n" + user_prompt)
+                if is_train:
+                    conv.append_message(roles[1], native_caption)
+                else:
+                    conv.append_message(roles[1], None)
+            if (not native_caption) and re_caption:
+                user_prompt = random.choice(re_caption_prompts)
+                conv.append_message(roles[0], "<image>\n" + user_prompt)
+                if is_train:
+                    conv.append_message(roles[1], re_caption)
+                else:
+                    conv.append_message(roles[1], None)
         conv_prompt = conv.get_prompt()
 
     if isinstance(sub_img_num, int):
@@ -310,6 +318,7 @@ def taisu2_text_preprocess(
                            task_type: str, 
                            sub_img_num: Union[int | List[int]], 
                            is_train: bool = True, 
+                           inference_recaption: bool = False, 
                            tokenizer: transformers.PreTrainedTokenizer = None, 
                            data_args = None
                           ) -> Dict[str, torch.Tensor]:
@@ -327,13 +336,15 @@ def taisu2_text_preprocess(
                                              padding_side=data_args.padding_side, 
                                              return_tensors=data_args.return_tensors, 
                                              return_attention_mask=data_args.return_attention_mask, 
-                                             is_train=is_train
+                                             is_train=is_train, 
+                                             inference_recaption=inference_recaption, 
                                             )
 
 
 def taisu2_wds_map(
                    wds_sample: Dict[str, str | bytes | Dict[str, bytes]], 
                    is_train: bool = True, 
+                   inference_recaption: bool = False, 
                    tokenizer: transformers.PreTrainedTokenizer = None, 
                    # TODO: Debug of wds.DataPipeline.with_epoch method
                    output_dir: str = None, 
@@ -381,7 +392,7 @@ def taisu2_wds_map(
         worker_out_fp.write(data_stem_name)
         worker_out_fp.write("\n")
 
-    wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, tokenizer=tokenizer, data_args=data_args)
+    wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, inference_recaption=inference_recaption, tokenizer=tokenizer, data_args=data_args)
     if isinstance(wds_sample["txt"], bytes):
         src_txt = wds_sample["txt"].decode(encoding="utf-8")
     else:
