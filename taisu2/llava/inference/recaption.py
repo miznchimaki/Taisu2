@@ -4,6 +4,7 @@ import math
 import os
 import shutil
 import json
+import torch.distributed
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -34,12 +35,15 @@ def init_distributed(args: Namespace = None):
     args.rank = str(os.environ["RANK"])
     args.world_size = str(os.environ["WORLD_SIZE"])
     args.local_rank = str(int(args.rank) % num_gpu_per_node)
-    deepspeed.init_distributed(
-                               dist_backend="nccl", 
-                               init_method="env://", 
-                               rank=int(args.rank), 
-                               world_size=int(args.world_size), 
-                              )
+    torch.distributed.init_process_group(
+                                         backend="nccl", 
+                                         init_method="env://", 
+                                         world_size=int(args.world_size), 
+                                         rank=int(args.rank), 
+                                         device_id=torch.device("cuda", int(args.local_rank))
+                                        )
+    torch.cuda.set_device(int(args.local_rank))
+    torch.distributed.barrier()
 
     if int(args.rank) == 0:
         print(f"DDP initialization finished for {args.world_size} processes")
@@ -153,7 +157,8 @@ def create_dataloader(
     wds_pipeline.append(tarfile_to_samples())
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
-    recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, data_args=args)
+    # TODO: Debug of wds.DataPipeline.with_epoch
+    recaption_map_func = partial(taisu2_wds_map, is_train=False, tokenizer=tokenizer, output_dir=str(output_dir), data_args=args)
     wds_pipeline.append(wds.map(recaption_map_func))
     recaption_wds = wds.DataPipeline(*wds_pipeline)
 
@@ -173,6 +178,8 @@ def create_dataloader(
                                                         tokenizer=tokenizer, 
                                                         pad_token_id=tokenizer.pad_token_id, 
                                                         conv_name=args.conv_template_name, 
+                                                        # TODO: Debug of wds.DataPipeline.with_epoch method
+                                                        output_dir=str(output_dir), 
                                                         is_train=False
                                                        )
 
@@ -230,7 +237,7 @@ def recaption(
 
     for batch_idx, batch_data in enumerate(tqdm(data_loader, 
                                                 desc=f"{args.recaption_idx}th_recaption", 
-                                                total=args.batch_num_per_rank + 1, 
+                                                total=args.batch_num_per_rank + 5, 
                                                 disable=int(args.rank) != 0, 
                                                 dynamic_ncols=True)):
         pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
@@ -255,6 +262,7 @@ def recaption(
 
     with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
         json.dump(recaption_res, recaption_fp, ensure_ascii=False)
+    torch.distributed.barrier()
     return
 
 
@@ -273,9 +281,6 @@ def recaption_res_aggregation(args: Namespace = None):
     with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
         json.dump(all_recaption_res, res_fp, ensure_ascii=False)
 
-    path_list = list(Path(args.output_dir).glob("*th_recaption_rank_*.json"))
-    for p in path_list:
-        p.unlink(missing_ok=False)
     return
 
 

@@ -96,7 +96,7 @@ class DataArguments:
     wds_nsamples_per_epoch: Optional[int] = field(default=None)
     wds_last_batch: Optional[bool] = field(default=True)
     wds_shuffle_seed: Optional[int] = field(default=42)
-    wds_worker_remained_data: Optional[bool] = field(default=True)
+    wds_worker_drop_last: Optional[bool] = field(default=False)
     # data arguments for image-text preprocessing
     txts_separator: Optional[str] = field(default="\n")
 
@@ -928,6 +928,8 @@ class DataCollatorForWebDataset(object):
     tokenizer: transformers.PreTrainedTokenizer
     pad_token_id: int
     conv_name: str
+    # TODO: Debug of wds.DataPipeline.with_epoch method
+    output_dir: str
     is_train: bool = True
 
     def __call__(
@@ -977,6 +979,17 @@ class DataCollatorForWebDataset(object):
         else:
             batch_imgs = (data["pixel_values"] for data in img_text_data)
             batch_imgs = torch.cat(tuple(batch_imgs), dim=0)
+
+            # TODO: Debug of wds.DataPipeline.with_epoch method
+            rank = os.getenv("RANK", None)
+            output_p = pathlib.Path(self.output_dir) / "debug_of_with_epoch" / f"{rank}th_rank_got_names.txt"
+            output_p.parent.mkdir(parents=True, exist_ok=True)
+            output_p.touch(exist_ok=True)
+            with open(output_p, mode="a", encoding="utf-8") as output_fp:
+                for data in img_text_data:
+                    output_fp.write(data["__key__"])
+                    output_fp.write("\n")
+
             if "internvl2_5" in self.conv_name or "internvl3" in self.conv_name:
                 if self.is_train:
                     image_flags = torch.ones((batch_imgs.shape[0], 1), dtype=torch.int)
@@ -998,6 +1011,8 @@ class DataCollatorForWebDataset(object):
 def make_wds_data_module(
                          tokenizer: transformers.PreTrainedTokenizer, 
                          num_workers: int = None, 
+                         # TODO: Debug of wds.DataPipeline.with_epoch method
+                         output_dir: str = None, 
                          data_args: DataArguments = None, 
                         ) -> Dict:
     """Make training and evaluation webdataset iterable for pretraining & supervised fine-tuning"""
@@ -1016,18 +1031,23 @@ def make_wds_data_module(
     wds_train_pipeline.append(
         wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed)
     )
-    wds_train_pipeline.append(wds.split_by_node)
-    wds_train_pipeline.append(wds.split_by_worker)
+    # TODO: Debug of wds.DataPipeline.with_epoch method
+    # wds_train_pipeline.append(wds.split_by_node)
+    # wds_train_pipeline.append(wds.split_by_worker)
     wds_train_pipeline.append(tarfile_to_samples())
     wds_train_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=data_args.wds_shuffle_seed))
-    wds_train_map = partial(taisu2_wds_map, is_train=True, tokenizer=tokenizer, data_args=data_args)
+    # TODO: Debug of wds.DataPipeline.with_epoch method
+    wds_train_pipeline.append(wds.split_by_node)
+    wds_train_pipeline.append(wds.split_by_worker)
+    # TODO: Debug of wds.DataPipeline.with_epoch method
+    wds_train_map = partial(taisu2_wds_map, is_train=True, tokenizer=tokenizer, output_dir=output_dir, data_args=data_args)
     wds_train_pipeline.append(wds.map(wds_train_map))
     train_web_dataset = wds.DataPipeline(*wds_train_pipeline)
 
     if data_args.wds_nsamples_per_epoch is None or (not isinstance(data_args.wds_nsamples_per_epoch, int)):
         raise RuntimeError(f"when training via webdataset, the total sample number must be specified by user")
     world_size = int(os.getenv("WORLD_SIZE", None))
-    if not data_args.wds_worker_remained_data:
+    if data_args.wds_worker_drop_last:
         if num_workers:
             total_data_per_worker = math.floor(data_args.wds_nsamples_per_epoch / (world_size * num_workers))
         else:
@@ -1043,15 +1063,19 @@ def make_wds_data_module(
     else:
         total_data_per_rank = total_data_per_worker
     total_data_all_rank = total_data_per_rank * world_size
+    data_args.total_data_per_worker = total_data_per_worker
     data_args.total_data_per_rank = total_data_per_rank
     data_args.total_data_all_rank = total_data_all_rank
 
+    # TODO: Debug of wds.DataPipeline.with_epoch method
     train_web_dataset.with_epoch(nsamples=total_data_per_worker)
-    train_web_dataset.with_length(n=total_data_all_rank, silent=True)
+    train_web_dataset.with_length(n=total_data_per_rank, silent=True)
 
+    # TODO: Debug of wds.DataPipeline.with_epoch method
     wds_collator = DataCollatorForWebDataset(
                                              tokenizer=tokenizer, 
                                              pad_token_id=tokenizer.pad_token_id, 
+                                             output_dir=output_dir, 
                                              conv_name=conversation_lib.default_conversation.name
                                             )
 
@@ -1343,8 +1367,10 @@ def train(attn_implementation=None):
     if data_args.wds_shards_folder:
         data_module = make_wds_data_module(
                                            tokenizer=tokenizer, 
+                                           num_workers=training_args.dataloader_num_workers, 
+                                           # TODO: Debug of wds.DataPipeline.with_epoch method
+                                           output_dir=training_args.output_dir, 
                                            data_args=data_args, 
-                                           num_workers=training_args.dataloader_num_workers
                                           )
     else:
         data_module = make_supervised_data_module(

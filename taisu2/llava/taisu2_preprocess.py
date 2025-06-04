@@ -341,6 +341,8 @@ def taisu2_wds_map(
                    wds_sample: Dict[str, str | bytes | Dict[str, bytes]], 
                    is_train: bool = True, 
                    tokenizer: transformers.PreTrainedTokenizer = None, 
+                   # TODO: Debug of wds.DataPipeline.with_epoch method
+                   output_dir: str = None, 
                    data_args = None
                   ):
     no_img = "jpg" not in wds_sample and "jpeg" not in wds_sample and "png" not in wds_sample
@@ -375,6 +377,15 @@ def taisu2_wds_map(
             imgs_list.append(img_map_res["pixel_values"]); sub_img_num.append(img_map_res["sub_img_num"])
         pixel_values = torch.cat(imgs_list, dim=0)
     data_stem_name = wds_sample["__key__"]
+
+    # TODO: Debug of wds.DataPipeline.with_epoch method
+    from torch.utils.data import get_worker_info
+    worker_outp = Path(output_dir) / "debug_of_with_epoch" / f"{os.getenv("RANK", None)}th_rank_{get_worker_info().id}th_worker_data_names.txt"
+    worker_outp.parent.mkdir(parents=True, exist_ok=True)
+    worker_outp.touch(exist_ok=True)
+    with open(worker_outp, mode="a", encoding="utf-8") as worker_out_fp:
+        worker_out_fp.write(data_stem_name)
+        worker_out_fp.write("\n")
 
     wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, tokenizer=tokenizer, data_args=data_args)
     if isinstance(wds_sample["txt"], bytes):

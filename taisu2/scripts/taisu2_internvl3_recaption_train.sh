@@ -27,7 +27,7 @@ cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}"
 
-deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
           ./llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
           --accelerator_config ./scripts/accelerator_cfg.json \
@@ -59,12 +59,12 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --padding_side right \
           --return_tensors "" \
           --return_attention_mask false \
-          --wds_shards_folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
+          --wds_shards_folder image-alttext-total-1.00M-at-2025-04-16-21:10:39 \
           --wds_shards_subfolder rename_and_rearchive \
-          --wds_nsamples_per_epoch 5856804 \
+          --wds_nsamples_per_epoch 787991 \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
-          --wds_worker_remained_data true \
+          --wds_worker_drop_last false \
           --txts_separator "\n" \
           --per_device_train_batch_size 4 \
           --gradient_accumulation_steps 1 \
@@ -74,15 +74,15 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --learning_rate 5e-5 \
           --weight_decay 0 \
           --warmup_ratio 0.0 \
-          --output_dir "$HOME/outputs/Taisu2/debuggg" \
+          --output_dir "$HOME/outputs/Taisu2/debug_of_with_epoch_method_modification_of_train_dataloader" \
           --cache_dir "" \
           --wandb_project "Taisu2" \
-          --run_name "debuggg" \
+          --run_name "debugg" \
           --bf16 true \
           --tf32 true \
           --save_total_limit 1 \
           --save_steps 2000 \
-          --report_to "wandb" \
+          --report_to "none" \
           --logging_steps 1 \
           --optim adamw_torch \
           --adam_beta1 0.9 \
