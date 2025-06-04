@@ -27,7 +27,7 @@ cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}"
 
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
+deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
           ./llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
           --accelerator_config ./scripts/accelerator_cfg.json \
@@ -74,7 +74,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 deepspeed --hostfile=${HOST_FILE} --no_ssh --
           --learning_rate 5e-5 \
           --weight_decay 0 \
           --warmup_ratio 0.0 \
-          --output_dir "$HOME/outputs/Taisu2/debug_of_with_epoch_method_modification_of_train_dataloader" \
+          --output_dir "$HOME/outputs/Taisu2/debugg" \
           --cache_dir "" \
           --wandb_project "Taisu2" \
           --run_name "debugg" \
