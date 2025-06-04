@@ -176,12 +176,6 @@ def taisu2_preprocess_internvl2_5(
             for prompt in prompt_fp:
                 all_prompts.append(prompt.strip())
 
-    img_tokens = set((IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN))
-    for token in tokenizer.added_tokens_decoder.values():
-        if token.content in img_tokens:
-            img_tokens.remove(token.content)
-    if img_tokens:
-        raise ValueError(f"InternVL2-5/InternVL3 tokenizer doesn't have special image tokens: {img_tokens}")
     conv = default_conversation.copy()
     conv.messages = []
     if conv.sep_style != conversation_lib.SeparatorStyle.MPT:
