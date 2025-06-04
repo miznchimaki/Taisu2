@@ -934,32 +934,37 @@ class DataCollatorForWebDataset(object):
                  self, 
                  img_text_data: Sequence[Dict]
                 ) -> WdsCollatorOutput:
+        max_input_len = max(native_ids.shape[0] for native_ids in native_input_ids)
         native_input_ids = [data["input_ids"] for data in img_text_data]
+        batch_input_ids = []
+        for input_ids in native_input_ids:
+            pad_input_ids = torch.full(
+                                       (max_input_len - input_ids.shape[0], ), 
+                                       self.pad_token_id, 
+                                       dtype=input_ids.dtype, 
+                                       device=input_ids.device
+                                      )
+            batch_input_ids.append(torch.cat((pad_input_ids, input_ids), dim=0))
+        batch_input_ids = torch.stack(batch_input_ids, dim=0)
         if self.is_train:
-            batch_input_ids = torch.nn.utils.rnn.pad_sequence(
-                                                              native_input_ids, 
-                                                              batch_first=True, 
-                                                              padding_value=self.pad_token_id
-                                                             )
-            batch_labels = (data["labels"] for data in img_text_data)
-            batch_labels = torch.nn.utils.rnn.pad_sequence(
-                                                           list(batch_labels), 
-                                                           batch_first=True, 
-                                                           padding_value=IGNORE_INDEX
-                                                          )
+            native_labels = [data["labels"] for data in img_text_data]
+            batch_labels = []
+            for labels in native_labels:
+                pad_labels = torch.full(
+                                        (max_input_len - input_ids.shape[0], ), 
+                                        IGNORE_INDEX, 
+                                        dtype=labels.dtype, 
+                                        device=labels.device
+                                       )
+                batch_labels.append(torch.cat((pad_labels, labels), dim=0))
+            batch_labels = torch.stack(batch_labels, dim=0)
         else:
-            max_input_len = max(native_ids.shape[0] for native_ids in native_input_ids)
             batch_attn_mask = []
-            batch_input_ids = []
             for input_ids in native_input_ids:
                 attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device, requires_grad=False)
                 pad_mask = torch.zeros((max_input_len - input_ids.shape[0], ), dtype=torch.long, device=input_ids.device, requires_grad=False)
                 batch_attn_mask.append(torch.cat((pad_mask, attn_mask), dim=0))
-
-                pad_input_ids = torch.full((max_input_len - input_ids.shape[0], ), self.pad_token_id, dtype=input_ids.dtype, device=input_ids.device)
-                batch_input_ids.append(torch.cat((pad_input_ids, input_ids), dim=0))
             batch_attn_mask = torch.stack(batch_attn_mask, dim=0)
-            batch_input_ids = torch.stack(batch_input_ids, dim=0)
             batch_names = [data["data_name"] for data in img_text_data]
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
         if batch_no_imgs:
