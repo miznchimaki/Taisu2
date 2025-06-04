@@ -259,7 +259,20 @@ def recaption(
     return
 
 
+def args_save(args: Namespace = None):
+    args_p = Path(args.output_dir) / "arguments.json"
+    args_dict = vars(args)
+    _ = args_dict.pop("conversation")
+    with open(args_p, mode="w", encoding="utf-8") as args_fp:
+        json.dump(args_dict, args_fp, ensure_ascii=False)
+    return
+
+
 def recaption_res_aggregation(args: Namespace = None):
+    root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
+    output_dir = root_dir / args.tars_folder / args.tars_subfolder / f"{args.recaption_idx}th_recaption"
+    assert output_dir.exists(), f"recaption result directory: {output_dir} does not exist!"
+    args.output_dir = str(output_dir)
     all_recaption_res = {}
     path_generator = Path(args.output_dir).glob("*th_recaption_rank_*.json")
     while True:
@@ -277,15 +290,6 @@ def recaption_res_aggregation(args: Namespace = None):
     return
 
 
-def args_save(args: Namespace = None):
-    args_p = Path(args.output_dir) / "arguments.json"
-    args_dict = vars(args)
-    _ = args_dict.pop("conversation")
-    with open(args_p, mode="w", encoding="utf-8") as args_fp:
-        json.dump(args_dict, args_fp, ensure_ascii=False)
-    return
-
-
 def parse_args():
 
     def eval_arg(x):
@@ -295,6 +299,7 @@ def parse_args():
             return str(x)
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--aggregate", type=bool, action="store_true", help="whether executing the recaption results aggregation or not")
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
     parser.add_argument("--local-rank", "--local_rank", dest="local_rank", type=int, default=None, 
@@ -362,14 +367,16 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    init_distributed(args=args)
-    set_conv_tempalte(args=args)
+    if not args.aggregate:
+        init_distributed(args=args)
+        set_conv_tempalte(args=args)
 
-    tokenizer_and_model = create_tokenizer_and_model(args=args)
-    tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
-    data_loader = create_dataloader(tokenizer, args=args)
+        tokenizer_and_model = create_tokenizer_and_model(args=args)
+        tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
+        data_loader = create_dataloader(tokenizer, args=args)
 
-    recaption(tokenizer, model, data_loader, args=args)
-    if int(args.rank) == 0:
+        recaption(tokenizer, model, data_loader, args=args)
+        if int(args.rank) == 0:
+            args_save(args=args)
+    else:
         recaption_res_aggregation(args=args)
-        args_save(args=args)
