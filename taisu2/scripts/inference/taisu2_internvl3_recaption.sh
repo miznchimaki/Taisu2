@@ -38,9 +38,9 @@ deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
                                          --min-subimg-num 1 \
                                          --max-subimg-num 12 \
                                          --use-thumbnail True \
-                                         --tars-folder image-alttext-total-8.00M-at-2025-04-11-19:42:01 \
+                                         --tars-folder image-alttext-total-1.00M-at-2025-04-16-21:10:39 \
                                          --tars-subfolder rename_and_rearchive \
-                                         --total-samples 5856804 \
+                                         --total-samples 787991 \
                                          --wds-shuffle-seed None \
                                          --model-name-or-path ${MODEL_NAME_OR_PATH} \
                                          --data-type bfloat16 \
@@ -65,3 +65,4 @@ deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
 
 end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
 echo "End Taisu2 image-alttext pairs recaption (inference) at ${end_time_stamp}"
+

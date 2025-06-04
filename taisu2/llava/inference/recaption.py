@@ -4,6 +4,7 @@ import math
 import os
 import shutil
 import json
+import torch.distributed
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -230,7 +231,7 @@ def recaption(
 
     for batch_idx, batch_data in enumerate(tqdm(data_loader, 
                                                 desc=f"{args.recaption_idx}th_recaption", 
-                                                total=args.batch_num_per_rank + 1, 
+                                                total=args.batch_num_per_rank + 5, 
                                                 disable=int(args.rank) != 0, 
                                                 dynamic_ncols=True)):
         pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
@@ -273,9 +274,6 @@ def recaption_res_aggregation(args: Namespace = None):
     with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
         json.dump(all_recaption_res, res_fp, ensure_ascii=False)
 
-    path_list = list(Path(args.output_dir).glob("*th_recaption_rank_*.json"))
-    for p in path_list:
-        p.unlink(missing_ok=False)
     return
 
 
