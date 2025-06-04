@@ -392,7 +392,13 @@ def taisu2_wds_map(
         worker_out_fp.write(data_stem_name)
         worker_out_fp.write("\n")
 
-    wds_text_map = partial(taisu2_text_preprocess, is_train=is_train, inference_recaption=inference_recaption, tokenizer=tokenizer, data_args=data_args)
+    wds_text_map = partial(
+                           taisu2_text_preprocess, 
+                           is_train=is_train, 
+                           inference_recaption=inference_recaption, 
+                           tokenizer=tokenizer, 
+                           data_args=data_args
+                          )
     if isinstance(wds_sample["txt"], bytes):
         src_txt = wds_sample["txt"].decode(encoding="utf-8")
     else:
