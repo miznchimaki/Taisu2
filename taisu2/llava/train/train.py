@@ -936,8 +936,8 @@ class DataCollatorForWebDataset(object):
                  self, 
                  img_text_data: Sequence[Dict]
                 ) -> WdsCollatorOutput:
-        max_input_len = max(native_ids.shape[0] for native_ids in native_input_ids)
         native_input_ids = [data["input_ids"] for data in img_text_data]
+        max_input_len = max(native_ids.shape[0] for native_ids in native_input_ids)
         batch_input_ids = []
         for input_ids in native_input_ids:
             pad_input_ids = torch.full(
