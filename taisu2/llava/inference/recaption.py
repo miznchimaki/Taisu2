@@ -4,7 +4,7 @@ import math
 import os
 import shutil
 import json
-import torch.distributed
+from datetime import timedelta
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -12,7 +12,6 @@ from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
-import deepspeed
 import transformers
 from transformers import AutoConfig, AutoTokenizer
 from transformers.utils import ModelOutput
@@ -269,7 +268,7 @@ def recaption(
 
     with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
         json.dump(recaption_res, recaption_fp, ensure_ascii=False)
-    torch.distributed.barrier()
+    torch.distributed.monitored_barrier(timeout=timedelta(seconds=24 * 3600))
     return
 
 
