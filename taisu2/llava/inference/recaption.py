@@ -37,6 +37,7 @@ def init_distributed(args: Namespace = None):
     torch.distributed.init_process_group(
                                          backend="nccl", 
                                          init_method="env://", 
+                                         timeout=timedelta(days=2), 
                                          world_size=int(args.world_size), 
                                          rank=int(args.rank), 
                                          device_id=torch.device("cuda", int(args.local_rank))
@@ -241,11 +242,15 @@ def recaption(
     recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
     recaption_p.unlink(missing_ok=True)
 
-    for batch_idx, batch_data in enumerate(tqdm(data_loader, 
+    for batch_idx, batch_data in enumerate(
+                                           tqdm(
+                                                data_loader, 
                                                 desc=f"{args.recaption_idx}th_recaption", 
                                                 total=args.batch_num_per_rank + 5, 
                                                 disable=int(args.rank) != 0, 
-                                                dynamic_ncols=True)):
+                                                dynamic_ncols=True
+                                               )
+                                          ):
         pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
         input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
         attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
@@ -268,7 +273,8 @@ def recaption(
 
     with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
         json.dump(recaption_res, recaption_fp, ensure_ascii=False)
-    torch.distributed.monitored_barrier(timeout=timedelta(seconds=24 * 3600))
+    print(f"process with rank {args.rank} has completed recaption results saving, into {recaption_p}")
+    torch.distributed.barrier()
     return
 
 
@@ -283,7 +289,7 @@ def recaption_res_aggregation(args: Namespace = None):
                 all_recaption_res.update(recaption_res)
         except StopIteration as _:
             break
-    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}_recaption.json"
+    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption.json"
     with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
         json.dump(all_recaption_res, res_fp, ensure_ascii=False)
 
