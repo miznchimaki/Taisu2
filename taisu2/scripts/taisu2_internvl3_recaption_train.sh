@@ -12,6 +12,9 @@ MIN_PORT=${4:-23333}
 MAX_PORT=${5:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
+OUTPUT_DIR=$HOME/outputs/Taisu2/debugg
+OUTPUT_FILE=${OUTPUT_DIR}/"output.log"
+OUTPUT_NAME=`echo ${OUTPUT_DIR} | rev | cut -d"/" -f1-1 | rev`
 
 echo "multi-node deepspeed host file: ${HOST_FILE}"
 echo "total multi-node number: ${NNODES}"
@@ -25,7 +28,7 @@ source $HOME/.bashrc
 conda activate xiaobao12
 cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
-echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}"
+echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee ${OUTPUT_FILE}
 
 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
@@ -74,10 +77,10 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --learning_rate 5e-5 \
           --weight_decay 0 \
           --warmup_ratio 0.0 \
-          --output_dir "$HOME/outputs/Taisu2/debugg" \
+          --output_dir ${OUTPUT_DIR} \
           --cache_dir "" \
           --wandb_project "Taisu2" \
-          --run_name "debugg" \
+          --run_name ${OUTPUT_NAME} \
           --bf16 true \
           --tf32 true \
           --save_total_limit 1 \
@@ -107,7 +110,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --lora_dropout 0.05 \
           --lora_weight_path "" \
           --lora_bias none \
-          --group_by_modality_length false \
+          --group_by_modality_length false \ 2>&1 | tee ${OUTPUT_FILE}
 
 end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
-echo "End Taisu2 image-alttext pairs recaption (model train) at ${end_time_stamp}"
+echo "End Taisu2 image-alttext pairs recaption (model train) at ${end_time_stamp}" 2>&1 | tee ${OUTPUT_FILE}
