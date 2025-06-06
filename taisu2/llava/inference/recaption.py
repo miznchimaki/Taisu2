@@ -5,7 +5,6 @@ import os
 import shutil
 import json
 from datetime import timedelta
-import deepspeed.comm
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -46,6 +45,8 @@ def init_distributed(args: Namespace = None):
 
     if int(args.rank) == 0:
         print(f"DDP initialization finished for {args.world_size} processes")
+    torch.cuda.set_device(int(args.local_rank))
+    deepspeed.comm.barrier()
     return
 
 
@@ -309,7 +310,6 @@ def parse_args():
             return str(x)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--aggregate", type=bool, action="store_true", help="whether executing the recaption results aggregation or not")
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
     parser.add_argument("--local-rank", "--local_rank", dest="local_rank", type=int, default=None, 
@@ -377,16 +377,14 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    if not args.aggregate:
-        init_distributed(args=args)
-        set_conv_tempalte(args=args)
+    init_distributed(args=args)
+    set_conv_tempalte(args=args)
 
-        tokenizer_and_model = create_tokenizer_and_model(args=args)
-        tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
-        data_loader = create_dataloader(tokenizer, args=args)
+    tokenizer_and_model = create_tokenizer_and_model(args=args)
+    tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
+    data_loader = create_dataloader(tokenizer, args=args)
 
-        recaption(tokenizer, model, data_loader, args=args)
-        if int(args.rank) == 0:
-            args_save(args=args)
-    else:
+    recaption(tokenizer, model, data_loader, args=args)
+    if int(args.rank) == 0:
+        args_save(args=args)
         recaption_res_aggregation(args=args)
