@@ -19,7 +19,7 @@ cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (inference) at ${start_time_stamp}"
 
-deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
+deepspeed --include localhost:0,1,2,3,4,5,6,7 --master_port ${MASTER_PORT} \
           ./llava/inference/recaption.py --recaption-idx 1 \
                                          --conv-template-name internvl2_5 \
                                          --num-workers 8 \
@@ -65,4 +65,3 @@ deepspeed --include localhost:0,1,3,4,5,6,7 --master_port ${MASTER_PORT} \
 
 end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
 echo "End Taisu2 image-alttext pairs recaption (inference) at ${end_time_stamp}"
-
