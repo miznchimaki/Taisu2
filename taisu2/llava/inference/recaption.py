@@ -4,6 +4,8 @@ import math
 import os
 import shutil
 import json
+from datetime import timedelta
+import deepspeed.comm
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -36,6 +38,7 @@ def init_distributed(args: Namespace = None):
     args.local_rank = str(int(args.rank) % num_gpu_per_node)
     deepspeed.init_distributed(
                                dist_backend="nccl", 
+                               timeout=timedelta(days=2), 
                                init_method="env://", 
                                rank=int(args.rank), 
                                world_size=int(args.world_size), 
@@ -261,6 +264,8 @@ def recaption(
 
     with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
         json.dump(recaption_res, recaption_fp, ensure_ascii=False)
+    print(f"process with rank {args.rank} has completed recaption results saving, into {recaption_p}")
+    deepspeed.comm.barrier()
     return
 
 
@@ -288,7 +293,7 @@ def recaption_res_aggregation(args: Namespace = None):
                 all_recaption_res.update(recaption_res)
         except StopIteration as _:
             break
-    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}_recaption.json"
+    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption.json"
     with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
         json.dump(all_recaption_res, res_fp, ensure_ascii=False)
 
