@@ -4,7 +4,7 @@
 # turn off the execution trace mode
 set +x
 
-HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/multinode_hostfile"}
+HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/ds_hostfile"}
 MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
 NNODES=$(cat $HOST_FILE | wc -l)
 NODE_RANK=${3:-0}
