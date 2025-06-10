@@ -19,8 +19,10 @@ from multiprocessing.sharedctypes import Synchronized
 from pathlib import PosixPath, Path
 
 
+time_fmt = "%Y-%m-%d-%H:%M:%S"
 logger: logging.Logger = None
 shared_data_num: Synchronized = None
+pid_to_rank: DictProxy = None
 recaption_dict: DictProxy = None
 shared_lock: AcquirerProxy = None
 
@@ -32,7 +34,8 @@ def parse_args() -> Namespace:
     parser.add_argument("--recaption-idx", type=int, default=None, help="recaption interger index of Taisu2 image-alttext pairs")
     parser.add_argument("--num-cnt-proc", type=int, default=64, help="process number for counting data")
     parser.add_argument("--num-archive-proc", type=int, default=64, help="process number for archiving txts into tars")
-    parser.add_argument("--logging-level", type=int, default=NOTSET, help="logging level for logger")
+    parser.add_argument("--data-num-per-tar", type=int, default=10000, help="data number per archived tar file holds")
+    parser.add_argument("--logging-level", type=int, default=NOTSET, choices=(NOTSET, DEBUG, INFO, WARNING, ERROR, FATAL), help="logging level for logger")
     args = parser.parse_args()
     base_data_dir: PosixPath = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets" / args.base_data_folder
     if not base_data_dir.exists():
@@ -71,6 +74,7 @@ def parse_args() -> Namespace:
     res_tars_dir: PosixPath = output_dir / "txt-tars"
     if res_tars_dir.exists():
         shutil.rmtree(res_tars_dir)
+    res_tars_dir.mkdir(parents=True, exist_ok=False)
     args.res_tars_dir = res_tars_dir
 
     return args
@@ -98,6 +102,7 @@ def args_log(args: Namespace = None):
     logger.info(f"naive tar files number: {args.tars_num}")
     logger.info(f"parallel process number for image-alttext pairs counting: {args.num_cnt_proc}")
     logger.info(f"parallel process number for txt -> tar archiving: {args.num_archive_proc}")
+    logger.info(f"data number per tar file: {args.data_num_per_tar}")
 
     return None
 
@@ -158,11 +163,35 @@ def count_data_num_task_func(tars_stem: List[str], naive_tars_dir: PosixPath = N
     return
 
 
+def worker_init_func():
+    global logger
+    global pid_to_rank, shared_lock
+    pid = str(os.getpid())
+    with shared_lock:
+        rank = str(len(pid_to_rank))
+        pid_to_rank[pid] = rank
+    logger.info(f"process with pid {pid} has finished initializetoin, get rank {rank}")
+
+    return
+
+
+def txt_archive_task_func(
+                          tars_stem: List[str], 
+                          naive_tars_dir: PosixPath = None, 
+                          tars_num: int = 0, 
+                          data_num: int = 0, 
+                          data_num_per_tar: int = 0, 
+                          result_dir: PosixPath = None
+                         ):
+    global logger, recaption_dict, shared_lock
+    # TODO: Now here
+
+
 def main():
     args = parse_args()
     init_logger(output_dir=args.output_dir, logging_level=args.logging_level)
     global logger
-    st_time = datetime.strftime(datetime.now(), "%Y-%m-%d-%H:%M:%S")
+    st_time = datetime.strftime(datetime.now(), time_fmt)
     logger.info(f"begin archiving txt files into tar files at {st_time}")
 
     args_log(args=args)
@@ -172,12 +201,10 @@ def main():
     shared_data_num = multiprocessing.Value("i")
     count_data_num = partial(count_data_num_task_func, naive_tars_dir=args.naive_tars_dir)
     with futures.ProcessPoolExecutor(max_workers=args.num_cnt_proc) as cnt_proc_exec:
-        _ = cnt_proc_exec.map(count_data_num, 
-                              tars_stem_iter(
-                                             naive_tars_dir=args.naive_tars_dir, 
-                                             naive_tars_num=args.tars_num, 
-                                             num_proc=args.num_cnt_proc
-                                            )
+        _ = cnt_proc_exec.map(
+                              count_data_num, 
+                              tars_stem_iter(naive_tars_dir=args.naive_tars_dir, naive_tars_num=args.tars_num, num_proc=args.num_cnt_proc),
+                              chunksize=1
                              )
     data_num_from_naive_tars = int(shared_data_num.value)
     if data_num_from_naive_tars != data_num_from_json:
@@ -186,7 +213,8 @@ def main():
     args.data_num = data_num_from_json
 
     with multiprocessing.Manager() as mp_manager:
-        global recaption_dict, shared_lock
+        global pid_to_rank, recaption_dict, shared_lock
+        pid_to_rank = mp_manager.dict()
         recaption_dict = mp_manager.dict()
         shared_lock = mp_manager.Lock()
         mp_dict_st_time = datetime.now()
@@ -194,11 +222,20 @@ def main():
         mp_dict_secs = (datetime.now() - mp_dict_st_time).total_seconds()
         logger.info(f"updating recaption results from json file into multi-process shared dictionary, "
                     f"takes {mp_dict_secs // 60} minutes, and {mp_dict_secs % 60} seconds in total")
-        # TODO: Now here
-        # with futures.ProcessPoolExecutor
+        txt_archive = partial(
+                              txt_archive_task_func, 
+                              naive_tars_dir=args.naive_tars_dir, 
+                              tars_num=args.tars_num, 
+                              data_num=args.data_num, 
+                              data_num_per_tar=args.data_num_per_tar, 
+                              result_dir=args.res_tars_dir
+                             )
+        with futures.ProcessPoolExecutor(max_workers=args.num_archive_proc, initializer=worker_init_func, initargs=()) as archive_proc_exec:
+            _ = archive_proc_exec.map(txt_archive, tars_stem_iter, chunksize=1)
 
-    ed_time = datetime.strftime(datetime.now(), "%Y-%m-%d-%H:%M:%S")
-    logger.info(f"end archiving txt files into tar files at {ed_time}")
+    ed_time = datetime.strftime(datetime.now(), time_fmt)
+    elapsed_secs = (datetime.strptime(st_time, time_fmt) - datetime.strptime(ed_time, time_fmt)).total_seconds()
+    logger.info(f"end archiving txt files into tar files at {ed_time}, takes {elapsed_secs // 60} minutes and {elapsed_secs % 60} seconds in total")
 
 
 if __name__ == "__main__":
