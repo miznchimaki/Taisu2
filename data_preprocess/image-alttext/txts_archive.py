@@ -100,8 +100,18 @@ def args_log(args: Namespace = None):
     logger.info(f"specific Taisu2 dataset folder: {args.specific_data_folder}")
     logger.info(f"recaption integer index: {args.recaption_idx}")
     logger.info(f"naive tar files number: {args.tars_num}")
-    logger.info(f"parallel process number for image-alttext pairs counting: {args.num_cnt_proc}")
-    logger.info(f"parallel process number for txt -> tar archiving: {args.num_archive_proc}")
+    if args.num_cnt_proc > args.tars_num:
+        args.num_cnt_proc = args.tars_num
+        logger.warning(f"process number for counting data is greater than tar files number, "
+                       f"hence set process number equal to tar files number ({args.tars_num})")
+    else:
+        logger.info(f"parallel process number for image-alttext pairs counting: {args.num_cnt_proc}")
+    if args.num_archive_proc > args.tars_num:
+        args.num_archive_proc = args.tars_num
+        logger.warning(f"process number for archiving is greater than tar files number, "
+                       f"hence set process number equal to tar files number ({args.tars_num})")
+    else:
+        logger.info(f"parallel process number for txt -> tar archiving: {args.num_archive_proc}")
     logger.info(f"data number per tar file: {args.data_num_per_tar}")
 
     return None
