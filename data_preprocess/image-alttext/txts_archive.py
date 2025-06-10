@@ -1,10 +1,9 @@
 # archiving txt files into archive tars
 import io, os, re
 import sys, json
-import math
 import shutil
 import tarfile
-from tarfile import TarFile, TarInfo
+from tarfile import TarInfo
 import time
 from datetime import datetime
 from typing import Dict, List
