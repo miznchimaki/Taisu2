@@ -214,7 +214,7 @@ def txt_archive_task_func(
                 data_name = cur_tar_stem + data_stem
                 try:
                     recap_str = recaption_dict[data_name]
-                except KeyError as err:
+                except KeyError as _:
                     with shared_lock:
                         logger.error(f"cannot find recaption string for naive image-alttext data named {data_name}")
                     sys.exit(1)
@@ -245,12 +245,9 @@ def main():
     global shared_data_num
     shared_data_num = multiprocessing.Value("i")
     count_data_num = partial(count_data_num_task_func, naive_tars_dir=args.naive_tars_dir)
+    cnt_iter = tars_stem_iter(naive_tars_dir=args.naive_tars_dir, naive_tars_num=args.tars_num, num_proc=args.num_cnt_proc)
     with futures.ProcessPoolExecutor(max_workers=args.num_cnt_proc) as cnt_proc_exec:
-        _ = cnt_proc_exec.map(
-                              count_data_num, 
-                              tars_stem_iter(naive_tars_dir=args.naive_tars_dir, naive_tars_num=args.tars_num, num_proc=args.num_cnt_proc),
-                              chunksize=1
-                             )
+        _ = cnt_proc_exec.map(count_data_num, cnt_iter, chunksize=1)
     data_num_from_naive_tars = int(shared_data_num.value)
     if data_num_from_naive_tars != data_num_from_json:
         raise RuntimeError(f"image-alttext pairs number got from naive tars: {data_num_from_naive_tars}; "
@@ -274,11 +271,12 @@ def main():
                               data_num_per_tar=args.data_num_per_tar, 
                               result_dir=args.res_tars_dir
                              )
+        archive_iter = tars_stem_iter(naive_tars_dir=args.naive_tars_dir, naive_tars_num=args.tars_num, num_proc=args.num_cnt_proc)
         with futures.ProcessPoolExecutor(max_workers=args.num_archive_proc, initializer=worker_init_func, initargs=()) as archive_proc_exec:
-            _ = archive_proc_exec.map(txt_archive, tars_stem_iter, chunksize=1)
+            _ = archive_proc_exec.map(txt_archive, archive_iter, chunksize=1)
 
     ed_time = datetime.strftime(datetime.now(), time_fmt)
-    elapsed_secs = (datetime.strptime(st_time, time_fmt) - datetime.strptime(ed_time, time_fmt)).total_seconds()
+    elapsed_secs = (datetime.strptime(ed_time, time_fmt) - datetime.strptime(st_time, time_fmt)).total_seconds()
     logger.info(f"end archiving txt files into tar files at {ed_time}, takes {elapsed_secs // 60} minutes and {elapsed_secs % 60} seconds in total")
 
 
