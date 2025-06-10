@@ -5,6 +5,7 @@ import math
 import shutil
 import tarfile
 from tarfile import TarFile, TarInfo
+import time
 from datetime import datetime
 from typing import Dict, List
 import argparse
@@ -170,6 +171,7 @@ def worker_init_func():
     with shared_lock:
         rank = str(len(pid_to_rank))
         pid_to_rank[pid] = rank
+    os.environ["RANK"] = rank
     logger.info(f"process with pid {pid} has finished initializetoin, get rank {rank}")
 
     return
@@ -177,14 +179,47 @@ def worker_init_func():
 
 def txt_archive_task_func(
                           tars_stem: List[str], 
-                          naive_tars_dir: PosixPath = None, 
                           tars_num: int = 0, 
                           data_num: int = 0, 
                           data_num_per_tar: int = 0, 
                           result_dir: PosixPath = None
                          ):
     global logger, recaption_dict, shared_lock
-    # TODO: Now here
+    rank = os.getenv("RANK", None)
+    last_tar_data_num = data_num % data_num_per_tar
+    last_tar_stem = f"{tars_num - 1:05d}"
+    for cur_tar_stem in tars_stem:
+        archive_st_time = datetime.now()
+        with shared_lock:
+            logger.info(f"process with rank {rank} gets {cur_tar_stem}.tar to archive txt files")
+        is_last_tar = cur_tar_stem == last_tar_stem
+        txt_tar_p = result_dir / f"{cur_tar_stem}.tar"
+        with tarfile.open(txt_tar_p, mode="w", encoding="utf-8") as txt_tar_fp:
+            if is_last_tar:
+                cur_data_num = last_tar_data_num
+            else:
+                cur_data_num = data_num_per_tar
+            for data_idx in range(cur_data_num):
+                data_stem = f"{data_idx:04d}"
+                data_name = cur_tar_stem + data_stem
+                try:
+                    recap_str = recaption_dict[data_name]
+                except KeyError as err:
+                    with shared_lock:
+                        logger.error(f"cannot find recaption string for naive image-alttext data named {data_name}")
+                    sys.exit(1)
+                recap_bytes = recap_str.encode(encoding="utf-8")
+                recaption_mem = TarInfo(name=f"{data_name}.txt")
+                recaption_mem.mtime = int(time.time())
+                recaption_mem.size = len(recap_bytes)
+                txt_tar_fp.addfile(recaption_mem, io.BytesIO(recap_bytes))
+        archive_ed_time = datetime.now()
+        archive_elapsed_secs = (archive_ed_time - archive_st_time).total_seconds()
+        with shared_lock:
+            logger.info(f"process with rank {rank} has finished archiving txt files of {cur_tar_stem}.tar, "
+                        f"taking {archive_elapsed_secs // 60} minutes and {archive_elapsed_secs % 60} seconds in total")
+
+    return
 
 
 def main():
@@ -224,7 +259,6 @@ def main():
                     f"takes {mp_dict_secs // 60} minutes, and {mp_dict_secs % 60} seconds in total")
         txt_archive = partial(
                               txt_archive_task_func, 
-                              naive_tars_dir=args.naive_tars_dir, 
                               tars_num=args.tars_num, 
                               data_num=args.data_num, 
                               data_num_per_tar=args.data_num_per_tar, 
