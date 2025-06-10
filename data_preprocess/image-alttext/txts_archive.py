@@ -82,7 +82,7 @@ def parse_args() -> Namespace:
 
 def init_logger(output_dir: PosixPath = None, logging_level: int = NOTSET):
     global logger
-    logger = logging.getLogger("txts -> tars archiving")
+    logger = logging.getLogger("txts -> tars archiving"); logger.setLevel(logging_level)
     formatter = logging.Formatter("[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s")
     stream_hndlr = logging.StreamHandler(); stream_hndlr.setFormatter(formatter); stream_hndlr.setLevel(logging_level)
     log_p: PosixPath = output_dir / "txts_archive.log"
@@ -118,11 +118,12 @@ def args_log(args: Namespace = None):
 
 
 def recaption_json_read(output_dir: PosixPath = None, recaption_idx: int = None) -> Dict[str, str]:
+    global logger
     json_p: PosixPath = output_dir / f"{recaption_idx}th_recaption.json"
     if not json_p.exists():
         raise FileNotFoundError(f"recaption json file - {json_p.name}, cannot be found under diretory - {json_p.parent}!")
     read_st_time = datetime.now()
-    with open(json_p, mode="r", encoding="ut-8") as json_fp:
+    with open(json_p, mode="r", encoding="utf-8") as json_fp:
         recaption_res = json.load(json_fp)
     read_ed_time = datetime.now()
     read_secs = (read_ed_time - read_st_time).total_seconds()
@@ -137,7 +138,7 @@ def tars_stem_iter(
                    naive_tars_num: int = 0, 
                    num_proc: int = 0
                   ):
-    naive_tars_iter = naive_tars_dir.glob("*..tar")
+    naive_tars_iter = naive_tars_dir.glob("*.tar")
     tars_num_per_proc = naive_tars_num // num_proc
     tars_remainder_num = naive_tars_num % num_proc
     cur_tars_num = 0
