@@ -63,14 +63,12 @@ def parse_args():
     args.preprocessed_data_dir = args.taisu2_specific_dir / "image-text-pairs"  # (1)
     if not args.preprocessed_data_dir.exists():
         raise FileNotFoundError(f"preprocessed Taisu2 image-alttext pairs directory: {args.preprocessed_data_dir}, does not exist!")
-    args.recap_txt_dir = args.taisu2_specific_dir / args.taisu2_recap_folder  # (2)
+    args.recap_dir = args.taisu2_specific_dir / args.taisu2_recap_folder
+    args.archive_out_dir = args.recap_dir
+    args.recap_txt_dir = args.recap_dir / "txt-tars"  # (2)
     if not args.recap_txt_dir.exists():
-        raise FileNotFoundError(f"recaption output directory of Taisu2 image-alttext pairs: {args.recap_txt_dir}, does not exist!")
-    args.archive_out_dir = args.taisu2_specific_dir / f"{args.taisu2_recap_folder}_imgtxt_pairs"  # (3)
+        raise FileNotFoundError(f"recaped txt files directory of Taisu2 image-alttext pairs: {args.recap_txt_dir}, does not exist")
     args.archive_out_data_dir = args.archive_out_dir / "image-text-pairs"  # (4)
-    if args.archive_out_dir.exists():
-        shutil.rmtree(args.archive_out_dir)
-    args.archive_out_data_dir.mkdir(parents=True, exist_ok=False)
 
     return args
 
