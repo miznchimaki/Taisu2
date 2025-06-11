@@ -152,9 +152,9 @@ def create_dataloader(
     wds_pipeline = [wds.SimpleShardList(urls=tar_urls)]
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
+    wds_pipeline.append(tarfile_to_samples())
     wds_pipeline.append(wds.split_by_node)
     wds_pipeline.append(wds.split_by_worker)
-    wds_pipeline.append(tarfile_to_samples())
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
     recaption_map_func = partial(
