@@ -219,9 +219,11 @@ def taisu2_preprocess_internvl2_5(
         # TODO: Debug!
         # if (not native_caption) and re_caption is None:
         #     raise ValueError(f"image-alttext pairs with stem name {data_stem_name} does not have an effective native caption and re-caption")
+        # TODO: Debug!
+        # if inference_recaption:
+        #     if not native_caption:
+        #         raise ValueError(f"during the recaption inference phase, native caption must be provided")
         if inference_recaption:
-            if not native_caption:
-                raise ValueError(f"during the recaption inference phase, native caption must be provided")
             user_prompt = random.choice(re_caption_prompts)
             conv.append_message(roles[0], "<image>\n" + user_prompt)
             conv.append_message(roles[1], None)
