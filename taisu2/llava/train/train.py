@@ -967,6 +967,8 @@ class DataCollatorForWebDataset(object):
             batch_attn_mask = torch.stack(batch_attn_mask, dim=0)
             batch_names = [data["data_name"] for data in img_text_data]
         batch_no_imgs = all("pixel_values" not in data for data in img_text_data)
+        # TODO: Debug!
+        batch_no_imgs = True
         if batch_no_imgs:
             if self.is_train:
                 return dict(

@@ -152,9 +152,13 @@ def create_dataloader(
     wds_pipeline = [wds.SimpleShardList(urls=tar_urls)]
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SHARD_SHUFFLE_BUFSIZE, initial=SHARD_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
+    # TODO: Debug!
+    # wds_pipeline.append(wds.split_by_node)
+    # wds_pipeline.append(wds.split_by_worker)
+    wds_pipeline.append(tarfile_to_samples())
+    # TODO: Debug!
     wds_pipeline.append(wds.split_by_node)
     wds_pipeline.append(wds.split_by_worker)
-    wds_pipeline.append(tarfile_to_samples())
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
     recaption_map_func = partial(
@@ -238,34 +242,43 @@ def recaption(
     recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
     recaption_p.unlink(missing_ok=True)
 
+    # TODO: Debug!
+    all_data_names = []
     for batch_idx, batch_data in enumerate(tqdm(data_loader, 
                                                 desc=f"{args.recaption_idx}th_recaption", 
                                                 total=args.batch_num_per_rank + 5, 
                                                 disable=int(args.rank) != 0, 
                                                 dynamic_ncols=True)):
-        pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
-        input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
-        attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
+        # TODO: Debug!
+        # pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
+        # input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
+        # attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
         data_names: List[str] = batch_data["data_names"]
-        batch_recaption: Union[torch.Tensor | ModelOutput] = model.generate(
-                                                                            pixel_values=pixel_values, 
-                                                                            input_ids=input_ids, 
-                                                                            attention_mask=attention_mask, 
-                                                                            **generation_cfg
-                                                                           )
-        if args.return_dict_in_generate:
-            recaption_strs = tokenizer.batch_decode(batch_recaption["sequences"], skip_special_tokens=True)
-        else:
-            recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
-        if len(data_names) != len(recaption_strs):
-            raise ValueError(f"the {batch_idx}th batch on process with rank {args.rank} encounter a length inequality "
-                             f"between input data_names({len(data_names)}) and outupt recaption strings ({len(recaption_strs)})!")
-        for data_name, recaption_str in zip(data_names, recaption_strs):
-            recaption_res.update({data_name: recaption_str})
+        all_data_names.extend(data_names)
+        # TODO: Debug!
+        # batch_recaption: Union[torch.Tensor | ModelOutput] = model.generate(
+        #                                                                     pixel_values=pixel_values, 
+        #                                                                     input_ids=input_ids, 
+        #                                                                     attention_mask=attention_mask, 
+        #                                                                     **generation_cfg
+        #                                                                    )
+        # if args.return_dict_in_generate:
+        #     recaption_strs = tokenizer.batch_decode(batch_recaption["sequences"], skip_special_tokens=True)
+        # else:
+        #     recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
+        # if len(data_names) != len(recaption_strs):
+        #     raise ValueError(f"the {batch_idx}th batch on process with rank {args.rank} encounter a length inequality "
+        #                      f"between input data_names({len(data_names)}) and outupt recaption strings ({len(recaption_strs)})!")
+        # for data_name, recaption_str in zip(data_names, recaption_strs):
+        #     recaption_res.update({data_name: recaption_str})
 
-    with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
-        json.dump(recaption_res, recaption_fp, ensure_ascii=False)
-    print(f"process with rank {args.rank} has completed recaption results saving, into {recaption_p}")
+    # TODO: Debug!
+    # with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
+    #     json.dump(recaption_res, recaption_fp, ensure_ascii=False)
+    # print(f"process with rank {args.rank} has completed recaption results saving, into {recaption_p}")
+    # TODO: Debug!
+    all_data_names_set = set(all_data_names)
+    print(f"process with rank {args.rank} has got {len(all_data_names_set)} data in total")
     deepspeed.comm.barrier()
     return
 
@@ -385,6 +398,7 @@ if __name__ == "__main__":
     data_loader = create_dataloader(tokenizer, args=args)
 
     recaption(tokenizer, model, data_loader, args=args)
-    if int(args.rank) == 0:
-        args_save(args=args)
-        recaption_res_aggregation(args=args)
+    # TODO: Debug!
+    # if int(args.rank) == 0:
+    #     args_save(args=args)
+    #     recaption_res_aggregation(args=args)

@@ -216,8 +216,9 @@ def taisu2_preprocess_internvl2_5(
                     native_caption = match_res.group(2)
         if native_caption is None and re_caption is None:
             native_caption = anns
-        if (not native_caption) and re_caption is None:
-            raise ValueError(f"image-alttext pairs with stem name {data_stem_name} does not have an effective native caption and re-caption")
+        # TODO: Debug!
+        # if (not native_caption) and re_caption is None:
+        #     raise ValueError(f"image-alttext pairs with stem name {data_stem_name} does not have an effective native caption and re-caption")
         if inference_recaption:
             if not native_caption:
                 raise ValueError(f"during the recaption inference phase, native caption must be provided")
@@ -255,6 +256,8 @@ def taisu2_preprocess_internvl2_5(
         for sub_img_num_per in sub_img_num:
             conv_prompt = conv_prompt.replace("<image>", IMG_START_TOKEN + sub_img_num_per * context_token_per_img * IMG_CONTEXT_TOKEN + IMG_END_TOKEN, 1)
     remained_img_token_num = conv_prompt.count("<image>")
+    # TODO: Debug!
+    remained_img_token_num = 0
     if remained_img_token_num:
         raise ValueError(f"after replacing all `<image>` into image context tokens, there're still `<image>` left: \n{conv_prompt}")
     tokenized_res = tokenizer(
@@ -365,20 +368,21 @@ def taisu2_wds_map(
                           max_num=data_args.max_subimg_num, 
                           use_thumbnail=data_args.use_thumbnail, 
                          )
-    if isinstance(wds_sample["jpg"], bytes):
-        pil_img = Image.open(io.BytesIO(wds_sample["jpg"])).convert("RGB")
-        img_map_res = wds_img_map(pil_img)
-        pixel_values = img_map_res["pixel_values"]
-        sub_img_num = img_map_res["sub_img_num"]
-    else:
-        imgs_list = []
-        sub_img_num = []
-        for img_idx in sorted(wds_sample["jpg"].keys()):
-            img_bytes = wds_sample["jpg"][img_idx]
-            pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            img_map_res = wds_img_map(pil_img)
-            imgs_list.append(img_map_res["pixel_values"]); sub_img_num.append(img_map_res["sub_img_num"])
-        pixel_values = torch.cat(imgs_list, dim=0)
+    # TODO: Debug!
+    # if isinstance(wds_sample["jpg"], bytes):
+    #     pil_img = Image.open(io.BytesIO(wds_sample["jpg"])).convert("RGB")
+    #     img_map_res = wds_img_map(pil_img)
+    #     pixel_values = img_map_res["pixel_values"]
+    #     sub_img_num = img_map_res["sub_img_num"]
+    # else:
+    #     imgs_list = []
+    #     sub_img_num = []
+    #     for img_idx in sorted(wds_sample["jpg"].keys()):
+    #         img_bytes = wds_sample["jpg"][img_idx]
+    #         pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    #         img_map_res = wds_img_map(pil_img)
+    #         imgs_list.append(img_map_res["pixel_values"]); sub_img_num.append(img_map_res["sub_img_num"])
+    #     pixel_values = torch.cat(imgs_list, dim=0)
     data_stem_name = wds_sample["__key__"]
 
     wds_text_map = partial(
@@ -395,11 +399,15 @@ def taisu2_wds_map(
         for txt_idx in sorted(wds_sample["txt"].keys()):
             txt_bytes = wds_sample["txt"][txt_idx]
             src_txt.append(txt_bytes.decode(encoding="utf-8"))
+    # TODO: Debug!
+    sub_img_num = []
     text_map_res = wds_text_map(src_txt, data_stem_name, task_type, sub_img_num)
     input_ids = text_map_res["input_ids"]
 
     if is_train:
         labels = text_map_res["labels"]
+        # TODO: Debug!
+        pixel_values = None
         return dict(
                     input_ids=input_ids, 
                     pixel_values=pixel_values, 
@@ -407,8 +415,10 @@ def taisu2_wds_map(
                    )
 
     # Inference/Evaluation
-    return dict(
-                input_ids=input_ids, 
-                pixel_values=pixel_values, 
-                data_name=data_stem_name
-               )
+    # TODO: Debug!
+    # return dict(
+    #             input_ids=input_ids, 
+    #             pixel_values=pixel_values, 
+    #             data_name=data_stem_name
+    #            )
+    return dict(input_ids=input_ids, data_name=data_stem_name)
