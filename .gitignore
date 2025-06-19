@@ -2,9 +2,5 @@
 **/build/
 **/__pycache__/
 **/*.so
-**/pyproject.toml
-**/requirements.txt
-**/setup.py
-**/setup.cfg
 **/wandb
 **/*.swp
