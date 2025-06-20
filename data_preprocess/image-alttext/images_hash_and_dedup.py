@@ -61,16 +61,26 @@ def main():
     # hash reading, find duplications, and deduplications
     if not args.group_dupsfind:
         hash_obj.dedup_images_in_tars(
-                                      str(hashtars_dir), max_distance_threshold=args.max_distance_threshold, scores=args.scores, 
-                                      search_method=args.search_method, num_tar_workers=args.num_tarread_workers, 
-                                      num_dist_workers=args.num_dist_workers, num_dedup_workers=args.num_dedup_workers
+                                      str(hashtars_dir), 
+                                      max_distance_threshold=args.max_distance_threshold, 
+                                      scores=args.scores, 
+                                      search_method=args.search_method, 
+                                      num_tar_workers=args.num_tarread_workers, 
+                                      num_dist_workers=args.num_dist_workers, 
+                                      num_dedup_workers=args.num_dedup_workers
                                      )
     else:  # group-based duplications finding
         hash_obj.group_dedup_in_tars(
-                                     str(hashtars_dir), outer_loop_iter=args.outer_loop_iter, shuffle_per_outer_iter=args.shuffle_interval, 
-                                     num_grp_inner_iter=args.num_grp_inner_iter, num_imgs_per_grp=args.num_imgs_per_grp, 
-                                     max_distance_threshold=args.max_distance_threshold, scores=args.scores, search_method=args.search_method, 
-                                     num_tarread_workers=args.num_tarread_workers, group_dist_workers=args.group_dist_workers, 
+                                     str(hashtars_dir), 
+                                     outer_loop_iter=args.outer_loop_iter, 
+                                     shuffle_per_outer_iter=args.shuffle_interval, 
+                                     num_grp_inner_iter=args.num_grp_inner_iter, 
+                                     num_imgs_per_grp=args.num_imgs_per_grp, 
+                                     max_distance_threshold=args.max_distance_threshold, 
+                                     scores=args.scores, 
+                                     search_method=args.search_method, 
+                                     num_tarread_workers=args.num_tarread_workers, 
+                                     group_dist_workers=args.group_dist_workers, 
                                      num_dedup_workers=args.num_dedup_workers
                                     )
 

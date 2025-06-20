@@ -333,7 +333,12 @@ class Hashing:
 
         total_tars_num = self.get_total_tars_num(tars_dir)
         logger.info(f"tar files number for hash encoding: {total_tars_num}")
-        logger.info(f"parallel hash encoding workers: {num_enc_workers}")
+        if num_enc_workers <= total_tars_num:
+            logger.info(f"parallel hash encoding workers: {num_enc_workers}")
+        else:
+            num_enc_workers = total_tars_num
+            logger.warning(f"tar files number for hashing: {total_tars_num}, but hashing workers: {num_enc_workers}, "
+                           f"which is greater than tar files number, hence set hashing workers number to {total_tars_num}")
 
         logger.info(f"Start images hash encoding in tar files via multi-process pool at {datetime.strftime(datetime.now(), date_fmt)}")
         with multiprocessing.Manager() as hash_manager:
@@ -626,9 +631,16 @@ class Hashing:
                         f"inner loop iter index {inner_iter_rank}, group index {proc_rank}")
 
     @staticmethod
-    def group_name_to_hash_generator(name_to_hash: DictProxy = None, total_imgs: int = None, num_imgs_per_inner_iter: int = None, 
-                                     inner_loop_idx: int = None, num_imgs_per_grp: int = None, last_inner_loop: bool = False, 
-                                     num_grp_last_inner_iter: int = None, num_imgs_last_inner_iter: int = None):
+    def group_name_to_hash_generator(
+                                     name_to_hash: DictProxy = None, 
+                                     total_imgs: int = None, 
+                                     num_imgs_per_inner_iter: int = None, 
+                                     inner_loop_idx: int = None, 
+                                     num_imgs_per_grp: int = None, 
+                                     last_inner_loop: bool = False, 
+                                     num_grp_last_inner_iter: int = None, 
+                                     num_imgs_last_inner_iter: int = None
+                                    ):
         inner_loop_img_st_idx = num_imgs_per_inner_iter * (inner_loop_idx - 1)
         inner_loop_img_ed_idx = num_imgs_per_inner_iter * inner_loop_idx
 
@@ -680,8 +692,13 @@ class Hashing:
                 yield group_name_to_hash
             return
 
-    def group_dupsfind_task_func(self, group_name_to_hash: Dict, res_save_p: PosixPath = None, 
-                                 dup_names: ListProxy = None, max_distance_threshold: int = 5, scores: bool = False, 
+    def group_dupsfind_task_func(
+                                 self, 
+                                 group_name_to_hash: Dict, 
+                                 res_save_p: PosixPath = None, 
+                                 dup_names: ListProxy = None, 
+                                 max_distance_threshold: int = 5, 
+                                 scores: bool = False, 
                                  search_method: str = 'brut_force_cython' if not sys.platform == 'win32' else 'bktree', 
                                  group_dist_workers: int = 4
                                 ):
@@ -749,10 +766,19 @@ class Hashing:
         worker_barrier.wait()
         return
 
-    def group_dedup_in_tars(self, hashtars_dir_str: str, outer_loop_iter: int = 3, shuffle_per_outer_iter: int = 5, num_grp_inner_iter: int = 12, 
-                            num_imgs_per_grp: int = 200000, max_distance_threshold: int = 5, scores: bool = False, 
+    def group_dedup_in_tars(
+                            self, 
+                            hashtars_dir_str: str, 
+                            outer_loop_iter: int = 3, 
+                            shuffle_per_outer_iter: int = 5, 
+                            num_grp_inner_iter: int = 12, 
+                            num_imgs_per_grp: int = 200000, 
+                            max_distance_threshold: int = 5, 
+                            scores: bool = False, 
                             search_method: str = 'brute_force_cython' if not sys.platform == 'win32' else 'bktree', 
-                            num_tarread_workers: int = 8, group_dist_workers: int = 4, num_dedup_workers: int = 16
+                            num_tarread_workers: int = 8, 
+                            group_dist_workers: int = 4, 
+                            num_dedup_workers: int = 16
                            ):
         """
         Find duplicated images of al tar files under a specified directory via group-based duplications finding. All images with hamming distance 
@@ -807,6 +833,10 @@ class Hashing:
 
         total_num_hashtars = self.get_total_tars_num(hashtars_dir)
         logger.info(f"number of images hash tar files reading in total: {total_num_hashtars}")
+        if num_tarread_workers > total_num_hashtars:
+            logger.warning(f"hash tars read worker number ({num_tarread_workers}) is greater than hash tar files number ({total_num_hashtars}), "
+                           f"hence set hash tars read worker number to {total_num_hashtars}")
+            num_tarread_workers = total_num_hashtars
 
         # group-based duplications finding, finding results saving, and deduplications
         with multiprocessing.Manager() as dedup_manager:
@@ -853,15 +883,30 @@ class Hashing:
 
                 inner_idx = 0
                 group_dupsfind_func = partial(
-                                              self.group_dupsfind_task_func, res_save_p=dupsfind_res_p, dup_names=dup_names, 
-                                              max_distance_threshold=max_distance_threshold, scores=scores, search_method=search_method, 
+                                              self.group_dupsfind_task_func, 
+                                              res_save_p=dupsfind_res_p, 
+                                              dup_names=dup_names, 
+                                              max_distance_threshold=max_distance_threshold, 
+                                              scores=scores, 
+                                              search_method=search_method, 
                                               group_dist_workers=group_dist_workers
                                              )
                 total_imgs = len(name_to_hash)
                 logger.info(f"images number for group-based duplications finding (total_imgs): {total_imgs}")
                 num_imgs_per_inner_iter = num_imgs_per_grp * num_grp_inner_iter
-                logger.info(f"pre-defined images number for each inner iteration of group-based duplications finding "
-                            f"(num_imgs_per_grp * num_grp_inner_iter): {num_imgs_per_inner_iter}")
+                if num_imgs_per_inner_iter < total_imgs:
+                    logger.info(f"pre-defined images number for each inner iteration of group-based duplications finding "
+                                f"(num_imgs_per_grp * num_grp_inner_iter): {num_imgs_per_inner_iter}")
+                else:
+                    org_num_imgs_per_inner_iter = num_imgs_per_inner_iter
+                    num_grp_inner_iter = 10
+                    num_imgs_per_grp = math.floor(total_imgs / (num_grp_inner_iter * 3))
+                    num_imgs_per_inner_iter = num_imgs_per_grp * num_grp_inner_iter
+                    logger.warning(f"in the {outer_idx}th outer loop, naitve image number inside per inner iteration: "
+                                   f"{org_num_imgs_per_inner_iter}, which is greater than total image number: {total_imgs}, "
+                                   f"Hence set images per group to {num_imgs_per_grp}; groups per inner "
+                                   f"iteration to {num_grp_inner_iter}."
+                                  )
                 max_inner_iters = math.ceil(total_imgs / num_imgs_per_inner_iter)
                 logger.info(f"maximum inner iterations of group-based duplications finding (max_inner_iters): {max_inner_iters}")
                 remainder = total_imgs % num_imgs_per_inner_iter
@@ -887,13 +932,20 @@ class Hashing:
                     dupsfind_barrier = dedup_manager.Barrier(inner_iter_grp)
                     procpool_initargs = (dedup_pid_to_rank, dedup_lock, dupsfind_barrier, logger, outer_idx + 1, inner_idx)
                     name_to_hash_generator = self.group_name_to_hash_generator(
-                                                                               name_to_hash=name_to_hash, total_imgs=total_imgs, 
-                                                                               num_imgs_per_inner_iter=num_imgs_per_inner_iter, inner_loop_idx=inner_idx, 
-                                                                               num_imgs_per_grp=num_imgs_per_grp, last_inner_loop=last_inner_loop, 
+                                                                               name_to_hash=name_to_hash, 
+                                                                               total_imgs=total_imgs, 
+                                                                               num_imgs_per_inner_iter=num_imgs_per_inner_iter, 
+                                                                               inner_loop_idx=inner_idx, 
+                                                                               num_imgs_per_grp=num_imgs_per_grp, 
+                                                                               last_inner_loop=last_inner_loop, 
                                                                                num_grp_last_inner_iter=num_grp_last_inner_iter,
                                                                                num_imgs_last_inner_iter=num_imgs_last_inner_iter
                                                                               )
-                    with futures.ProcessPoolExecutor(inner_iter_grp, initializer=self.group_dupsfind_worker_init_func, initargs=procpool_initargs) as group_dupsfind_exec:
+                    with futures.ProcessPoolExecutor(
+                                                     inner_iter_grp, 
+                                                     initializer=self.group_dupsfind_worker_init_func, 
+                                                     initargs=procpool_initargs
+                                                    ) as group_dupsfind_exec:
                         _ = group_dupsfind_exec.map(group_dupsfind_func, name_to_hash_generator, chunksize=1)
                     inner_ed_time = datetime.now()
                     logger.info(f"outer loop index: {outer_idx + 1}; inner loop index: {inner_idx}, ending of {inner_iter_grp} groups via a process pool "
@@ -927,17 +979,22 @@ class Hashing:
             gc.collect()
 
             # (3) deduplication by re-archiving to new tar files
-            dedup_barrier = dedup_manager.Barrier(num_dedup_workers)
             logger.info(f"start images deduplication via process pool at {datetime.strftime(datetime.now(), date_fmt)}")
-            dedup_initargs = (dedup_pid_to_rank, dedup_lock, dedup_barrier, logger)
             partial_tarimgs_dedup_func = partial(self.tarimages_dedup_task_func, dupimgs_shared_list=dup_names, output_dir=dedup_res_dir)
             if len(name_to_hash) + len(dup_names) != native_total_imgs:
-                raise ValueError(f"remained images number {len(name_to_hash)} plus duplicated images {len(dup_names)} number should be equal to native "
-                                 f"images number {native_total_imgs}, but get {len(name_to_hash) + len(dup_names)}")
+                raise ValueError(f"remained images number {len(name_to_hash)} plus duplicated images {len(dup_names)} "
+                                 f"number should be equal to native images number {native_total_imgs}, "
+                                 f"but get {len(name_to_hash) + len(dup_names)}")
             logger.info(f"{len(name_to_hash)} images are remained, and {len(dup_names)} images will be deduplicated")
             imgtars_dir = hashtars_dir.parent.parent / "image-text-pairs"
             total_num_imgtars = self.get_total_tars_num(imgtars_dir)
+            if num_dedup_workers > total_num_imgtars:
+                logger.warning(f"number worker for deduplication ({num_dedup_workers}) is greater than total number "
+                               f"of image-text tars ({total_num_imgtars}), hence set num_dedup_workers to {total_num_imgtars}")
+                num_dedup_workers = total_num_imgtars
             imgtars_generator = self.tar_generator_func(imgtars_dir, total_num_imgtars, num_dedup_workers)
+            dedup_barrier = dedup_manager.Barrier(num_dedup_workers)
+            dedup_initargs = (dedup_pid_to_rank, dedup_lock, dedup_barrier, logger)
             with futures.ProcessPoolExecutor(num_dedup_workers, initializer=self.worker_init_func, initargs=dedup_initargs) as dedup_exec:
                 _ = dedup_exec.map(partial_tarimgs_dedup_func, imgtars_generator, chunksize=1)
             logger.info(f"end images deduplication via process pool at {datetime.strftime(datetime.now(), date_fmt)}\n\n")
@@ -946,10 +1003,19 @@ class Hashing:
 
         # (4) arguments saving
         save_args = {
-                     "hashtars_dir": hashtars_dir_str, "outer_loop_iter": outer_loop_iter, "shuffle_per_outer_iter": shuffle_per_outer_iter, 
-                     "num_grp_inner_iter": num_grp_inner_iter, "num_imgs_per_grp": num_imgs_per_grp, "max_distance_threshold": max_distance_threshold, 
-                     "scores": scores, "search_method": search_method, "hashtar_reading_workers": num_tarread_workers, "dupsfind_workers": group_dist_workers, 
-                     "dedup_workers": num_dedup_workers, "dupsfind_result_path": str(dupsfind_res_p), "dedup_result_dir": str(dedup_res_dir)
+                     "hashtars_dir": hashtars_dir_str, 
+                     "outer_loop_iter": outer_loop_iter, 
+                     "shuffle_per_outer_iter": shuffle_per_outer_iter, 
+                     "num_grp_inner_iter": num_grp_inner_iter, 
+                     "num_imgs_per_grp": num_imgs_per_grp, 
+                     "max_distance_threshold": max_distance_threshold, 
+                     "scores": scores, 
+                     "search_method": search_method, 
+                     "hashtar_reading_workers": num_tarread_workers, 
+                     "dupsfind_workers": group_dist_workers, 
+                     "dedup_workers": num_dedup_workers, 
+                     "dupsfind_result_path": str(dupsfind_res_p), 
+                     "dedup_result_dir": str(dedup_res_dir)
                     }
         args_save_p = dedup_res_dir.parent / "arguments.json"
         with open(args_save_p, mode="w", encoding="utf-8") as args_save_fp:
