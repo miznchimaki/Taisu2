@@ -12,8 +12,8 @@ sample_max_workers=${8:-8}
 logging_level=${9:-DEBUG}
 
 source $HOME/.bashrc
-conda activate lxb39
-cd $HOME/projects/Taisu2_self/data_preprocess/image-alttext/
+conda activate xiaobao12
+cd $HOME/projects/Taisu2/data_preprocess/image-alttext/
 
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "image-alttext randomly sampling begins at ${start_time_stamp}"

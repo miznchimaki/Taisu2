@@ -2,8 +2,8 @@
 
 
 source $HOME/.bashrc
-cd $HOME/projects/Taisu2_self/data_preprocess/image-alttext/
-conda activate lxb39
+cd $HOME/projects/Taisu2/data_preprocess/image-alttext/
+conda activate xiaobao12
 
 raw_data_folder=${1:-"image-alttext-total-8.00M-at-2025-04-11-19:42:01"}
 specific_data_folder=${2:-"images_group_dedup image-text-pairs"}
