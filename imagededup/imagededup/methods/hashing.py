@@ -483,9 +483,14 @@ class Hashing:
         return
 
     def dedup_images_in_tars(
-                             self, hashtars_dir_str: str, max_distance_threshold: int = 5, scores: bool = False, 
+                             self, 
+                             hashtars_dir_str: str, 
+                             max_distance_threshold: int = 5, 
+                             scores: bool = False, 
                              search_method: str = 'brute_force_cython' if not sys.platform == 'win32' else 'bktree', 
-                             num_tar_workers: int = 8, num_dist_workers: int = 4, num_dedup_workers: int = 16
+                             num_tar_workers: int = 8, 
+                             num_dist_workers: int = 4, 
+                             num_dedup_workers: int = 16
                             ):
         """
         Find duplicated images of al tar files under a specified directory. All images with hamming distance less than or
