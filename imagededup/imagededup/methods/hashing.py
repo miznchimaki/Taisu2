@@ -751,8 +751,13 @@ class Hashing:
                                f"starts its duplications finding task among {len(group_name_to_hash)} images with hashes")
         try:
             dupsfind_obj = HashEval(
-                                    test=group_name_to_hash, queries=group_name_to_hash, distance_function=self.hamming_distance, verbose=self.verbose, 
-                                    threshold=max_distance_threshold, search_method=search_method, num_dist_workers=group_dist_workers
+                                    test=group_name_to_hash, 
+                                    queries=group_name_to_hash, 
+                                    distance_function=self.hamming_distance, 
+                                    verbose=self.verbose, 
+                                    threshold=max_distance_threshold, 
+                                    search_method=search_method, 
+                                    num_dist_workers=group_dist_workers
                                    )
             dupsfind_res: Dict[str, List[Union[str, Tuple[str, int]]]] = dupsfind_obj.retrieve_results(scores=scores)
             dups_set = set()
