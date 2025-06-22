@@ -537,6 +537,10 @@ class Hashing:
 
         total_num_hashtars = self.get_total_tars_num(hashtars_dir)
         logger.info(f"number of images hash tar files reading in total: {total_num_hashtars}")
+        if num_tar_workers > total_num_hashtars:
+            logger.warning(f"image hashing tar files total number: {total_num_hashtars}; tar files reading "
+                           f"workers number: {num_tar_workers}, hence set tar files reading workers number to {total_num_hashtars}")
+            num_tar_workers = total_num_hashtars
 
         with multiprocessing.Manager() as dedup_manager:
             dedup_pid_to_rank = dedup_manager.dict()
@@ -560,8 +564,12 @@ class Hashing:
             gc.collect()
             try:
                 dupsfind_obj = HashEval(
-                                        test=name_to_hash, queries=name_to_hash, distance_function=self.hamming_distance, 
-                                        verbose=self.verbose, threshold=max_distance_threshold, search_method=search_method, 
+                                        test=name_to_hash, 
+                                        queries=name_to_hash, 
+                                        distance_function=self.hamming_distance, 
+                                        verbose=self.verbose, 
+                                        threshold=max_distance_threshold, 
+                                        search_method=search_method, 
                                         num_dist_workers=num_dist_workers
                                        )
                 dupsfind_res = dupsfind_obj.retrieve_results(scores=scores)
@@ -591,14 +599,18 @@ class Hashing:
 
             # (4) image deduplications
             dedup_pid_to_rank.clear()
-            dedup_barrier = dedup_manager.Barrier(num_dedup_workers)
             logger.info(f"start images deduplication via multi-processing pool at {datetime.strftime(datetime.now(), date_fmt)}")
             logger.info(f"native image number: {native_imgnum}, and {len(dupimgs_list)} images are duplicated and will be discarded")
-            dedup_initargs = (dedup_pid_to_rank, dedup_lock, dedup_barrier, logger)
 
             partial_tarimgs_dedup_func = partial(self.tarimages_dedup_task_func, dupimgs_shared_list=dupimgs_list, output_dir=dedup_res_dir)
             imgtars_dir = hashtars_dir.parent.parent / "image-text-pairs"
             total_num_imgtars = self.get_total_tars_num(imgtars_dir)
+            if num_dedup_workers > total_num_imgtars:
+                logger.warning(f"image-text tar files total number: {total_num_imgtars}, while dedup workers number: {num_dedup_workers} is "
+                               f"greater than it, hence set dedup workers number to {total_num_imgtars}")
+                num_dedup_workers = total_num_imgtars
+            dedup_barrier = dedup_manager.Barrier(num_dedup_workers)
+            dedup_initargs = (dedup_pid_to_rank, dedup_lock, dedup_barrier, logger)
             imgtars_generator = self.tar_generator_func(imgtars_dir, total_num_imgtars, num_dedup_workers)
             with futures.ProcessPoolExecutor(num_dedup_workers, initializer=self.worker_init_func, initargs=dedup_initargs) as dedup_exec:
                 _ = dedup_exec.map(partial_tarimgs_dedup_func, imgtars_generator, chunksize=1)
@@ -606,9 +618,15 @@ class Hashing:
 
         # (5) arguments saving
         save_args = {
-                     "hashtars_dir": hashtars_dir_str, "max_distance_threshold": max_distance_threshold, "scores": scores, 
-                     "search_method": search_method, "hashtar_reading_workers": num_tar_workers, "dupsfind_workers": num_dist_workers, 
-                     "dedup_workers": num_dedup_workers, "dupsfind_result_path": str(dupsfind_res_p), "dedup_result_dir": str(dedup_res_dir)
+                     "hashtars_dir": hashtars_dir_str, 
+                     "max_distance_threshold": max_distance_threshold, 
+                     "scores": scores, 
+                     "search_method": search_method, 
+                     "hashtar_reading_workers": num_tar_workers, 
+                     "dupsfind_workers": num_dist_workers, 
+                     "dedup_workers": num_dedup_workers, 
+                     "dupsfind_result_path": str(dupsfind_res_p), 
+                     "dedup_result_dir": str(dedup_res_dir)
                     }
         args_save_p = dedup_res_dir.parent / "arguments.json"
         with open(args_save_p, mode="w", encoding="utf-8") as args_save_fp:
