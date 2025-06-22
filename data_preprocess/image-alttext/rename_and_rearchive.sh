@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 source $HOME/.bashrc
-cd $HOME/projects/Taisu2_self/data_preprocess/image-alttext
-conda activate lxb39
+cd $HOME/projects/Taisu2/data_preprocess/image-alttext
+conda activate xiaobao12
 
 taisu2_base_folder=${1:-"image-alttext-total-8.00M-at-2025-04-11-19:42:01"}
 taisu2_specific_folder=${2:-"images_pixel_filter_336x336_split_1_12 image-text-pairs"}
