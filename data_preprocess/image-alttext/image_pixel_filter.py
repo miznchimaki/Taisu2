@@ -319,6 +319,10 @@ def main():
 
     barrier = multiprocessing.Barrier(args.max_workers)
     partial_pixel_filter_func = partial(pixel_filter_task_func, args=vars(args))
+    if args.max_workers > args.total_tars_num:
+        logger.warning(f"tar files total number: {args.total_tars_num}, maximum worker: {args.max_workers}, "
+                       f"hence set maximum workers to {args.total_tars_num}")
+        args.max_workers = args.total_tars_num
     tar_list_generator = tar_generator_func(args.specific_data_dir, args.total_tars_num, args.max_workers)
 
     global mp_preserve, mp_filter, mp_filter_min, mp_filter_max

@@ -153,6 +153,10 @@ def data_num_task_func(native_tars_list: List[PosixPath], res_p: PosixPath = Non
 def get_native_data_num(native_data_dir: PosixPath = None, args: Namespace = None):
     global logger
     native_tars_generator = tars_path_generator(native_data_dir, args.native_tar_num, args.max_workers_for_data_num)
+    if args.max_workers_for_data_num > args.native_tar_num:
+        logger.warning(f"native tar files number for renaming and rearchiving: {args.native_tar_num}; maximum workers for "
+                       f"counting data number: {args.max_workers_for_data_num}, hence set workers number to {args.native_tar_num}")
+        args.max_workers_for_data_num = args.native_tar_num
     shared_data_num = multiprocessing.Value("i")
     shared_lock = multiprocessing.Lock()
     tarname_to_imgnames_p: PosixPath = args.taisu2_output_dir / "tarname_to_imgnames.jsonl"
@@ -425,6 +429,11 @@ def main():
     st_time = datetime.now()
     # start renaming and rearchiving image-alttext data of Taisu2
     logger.info(f"start renaming and rearchiving of pre-processed Taisu2 image-alttext pairs at {datetime.strftime(st_time, date_fmt)}")
+    if args.max_workers > math.floor(args.native_data_num / args.data_num_per_tar):
+        tmp_tars_num = math.floor(args.native_data_num / args.data_num_per_tar)
+        logger.warning(f"new tar files number: {tmp_tars_num} or {tmp_tars_num + 1}, but maximum workers: {args.max_workers}, "
+                       f"hence set maximum workers to {tmp_tars_num}")
+        args.max_workers = tmp_tars_num
     with multiprocessing.Manager() as proc_manager:
         global pid_to_rank, proc_lock, proc_barrier
         pid_to_rank = proc_manager.dict()
