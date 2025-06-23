@@ -217,6 +217,7 @@ def tarnames_generator_func(max_workers: int = None):
                     tarnames_list.append(next(tarnames_iter))
                     remainder -= 1
                 yield tarnames_list
+                tarnames_list = []
         except StopIteration as _:
             break
     if tarnames_list:
@@ -268,7 +269,7 @@ def recaption_archive_task_func(tarnames: List[str], args: Dict = None):
 
             recap_raw_bytes = recap_tarfp.extractfile(txtname).read()
             recap_bytes = io.BytesIO(recap_raw_bytes)
-            recap_tarinfo = TarInfo(txtname); recap_tarinfo.mtiem = int(time.time()); recap_tarinfo.size = len(recap_raw_bytes)
+            recap_tarinfo = TarInfo(txtname); recap_tarinfo.mtime = int(time.time()); recap_tarinfo.size = len(recap_raw_bytes)
             output_tarfp.addfile(img_tarinfo, img_bytes)
             output_tarfp.addfile(recap_tarinfo, recap_bytes)
 
