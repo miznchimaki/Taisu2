@@ -46,14 +46,14 @@ shared_recap_txtnum: Synchronized = None
 def parse_args():
     parser = argparse.ArgumentParser(description="command line arguments parser for Taisu2 image-alttext paris recaptions archiving")
     parser.add_argument("--taisu2-base-folder", type=str, default=None, help="Taisu2 image-alttext pairs basic folder")
-    parser.add_argument("--taisu2-specific-folder", type=str, default=None, help="Taisu2 image-alttext pairs specific folder")
+    parser.add_argument("--taisu2-specific-folder", type=str, default=None, nargs="+", help="Taisu2 image-alttext pairs specific folder")
     parser.add_argument("--taisu2-recap-folder", type=str, default=None, help="folder stored recaptions tar files of Taisu2 image-alttext pairs")
     parser.add_argument("--tarread-workers", type=int, default=80, help="max parallel workers for getting tar and txt files names and total number")
     parser.add_argument("--max-workers", type=int, default=80, help="max parallel workers for archiving recaptions of Taisu2 image-alttext dataset")
     parser.add_argument("--logging-level", type=int, choices=(NOTSET, DEBUG, INFO, WARNING, ERROR, FATAL), default=NOTSET, 
                         help="output logging level for logging.Logger")
     args = parser.parse_args()
-    args.taisu2_base_dir = Path(os.getenv("HOME", "")) / "datasets" / args.taisu2_base_folder
+    args.taisu2_base_dir = Path(os.getenv("HOME", "")) / "datasets" / "Taisu2_datasets" / args.taisu2_base_folder
     if not args.taisu2_base_dir.exists():
         raise FileNotFoundError(f"basic directory of Taisu2 image-alttext paris: {args.taisu2_base_dir}, does not exist!")
     args.taisu2_specific_folder = "/".join(args.taisu2_specific_folder).strip().strip("/").strip()
@@ -69,6 +69,9 @@ def parse_args():
     if not args.recap_txt_dir.exists():
         raise FileNotFoundError(f"recaped txt files directory of Taisu2 image-alttext pairs: {args.recap_txt_dir}, does not exist")
     args.archive_out_data_dir = args.archive_out_dir / "image-text-pairs"  # (4)
+    if args.archive_out_data_dir.exists():
+        shutil.rmtree(args.archive_out_data_dir)
+    args.archive_out_data_dir.mkdir(parents=True, exist_ok=False)
 
     return args
 
@@ -173,7 +176,8 @@ def get_tartxt_info(tars_dir: PosixPath, max_workers: int, data_type: str = None
             args.native_tarnum = shared_native_tarnum.value
             args.native_txtnum = shared_native_txtnum.value
             native_tarnames.update(native_tartxt_dict.keys())
-            native_txtnames.update(native_tartxt_dict.values())
+            for txtnames in native_tartxt_dict.values():
+                native_txtnames.update(txtnames)
             del native_tartxt_dict; del shared_native_tarnum; del shared_native_txtnum
         else:  # recap
             global recap_tarnames, recap_txtnames
@@ -181,7 +185,8 @@ def get_tartxt_info(tars_dir: PosixPath, max_workers: int, data_type: str = None
             args.recap_tarnum = shared_recap_tarnum.value
             args.recap_txtnum = shared_recap_txtnum.value
             recap_tarnames.update(recap_tartxt_dict.keys())
-            recap_txtnames.update(recap_tartxt_dict.values())
+            for txtnames in recap_tartxt_dict.values():
+                recap_txtnames.update(txtnames)
             del recap_tartxt_dict; del shared_recap_tarnum; del shared_recap_txtnum
 
     del info_manager
@@ -195,6 +200,7 @@ def recaption_archive_init_func():
     with proc_lock:
         proc_rank = str(len(pid_to_rank))
         pid_to_rank[pid] = proc_rank
+    os.environ["RANK"] = proc_rank
     global proc_barrier
     if not isinstance(proc_barrier, Barrier) or proc_barrier is None:
         with proc_lock:
@@ -284,9 +290,10 @@ def recaption_archive_task_func(tarnames: List[str], args: Dict = None):
             logger.info(f"process with rank {proc_rank} ends archiving images and recaptions of tar file {tarname}")
 
     proc_ed_time = datetime.now()
+    proc_elapsed_secs = (proc_ed_time - proc_st_time).total_seconds()
     with proc_lock:
         logger.info(f"process with rank {proc_rank} ends handling all tar files dispendided to it at {datetime.strftime(proc_ed_time, date_fmt_str)}, "
-                    f"takes {(proc_ed_time - proc_st_time).total_seconds() / 60:.3f} minutes in total, has completed {tarnum} tar files and {datanum} "
+                    f"takes {(proc_elapsed_secs / 60):.3f} minutes in total, has completed {tarnum} tar files and {datanum} "
                     f"image-alttext pairs in total")
 
     return
@@ -332,8 +339,9 @@ def main():
             logger.error(f"extra recaption txt files number: {len(diff_txtnames_2)}; extra recaption txt files: {diff_txtnames_2}")
         sys.exit(1)
     ed_time = datetime.now()
+    elapsed_secs = (ed_time - st_time).total_seconds()
     logger.info(f"end checking tar and txt files before and after recaption at {datetime.strftime(ed_time, date_fmt_str)}, "
-                f"takes {(ed_time - st_time).total_seconds() / 60:3.f} minutes in total")
+                f"takes {(elapsed_secs / 60):.3f} minutes in total")
 
     st_time = datetime.now()
     logger.info(f"begin archiving recaptions into new tar files at {datetime.strftime(st_time, date_fmt_str)}")
@@ -347,8 +355,12 @@ def main():
         with futures.ProcessPoolExecutor(args.max_workers, initializer=recaption_archive_init_func, initargs=()) as archive_exec:
             _ = archive_exec.map(partial_recaption_archive_func, tarnames_generator_func(args.max_workers), chunksize=1)
     ed_time = datetime.now()
-    logger.info(f"end archiving recaptions into new tar files at {datetime.strftime(ed_time, date_fmt_str)}, takes {(ed_time - st_time) // 3600:d} hours "
-                f"and {(((ed_time - st_time) % 3600) / 60):.3f} minutes in total")
+    elapsed_secs = (ed_time - st_time).total_seconds()
+    elapsed_hours = int(elapsed_secs // 3600)
+    elapsed_mins = (elapsed_secs % 3600) / 60
+    logger.info(f"end archiving recaptions into new tar files at {datetime.strftime(ed_time, date_fmt_str)}, "
+                f"takes {elapsed_hours:d} hours and {elapsed_mins:.3f} "
+                f"minutes in total")
 
 
 if __name__ == "__main__":
