@@ -252,7 +252,7 @@ def recaption_archive_task_func(tarnames: List[str], args: Dict = None):
         global recap_txtnames
         tar_stem = tarname.split(".")[0]
         filter_func = lambda x: True if re.match(tar_stem, x) is not None and re.match(tar_stem, x).span() == (0, 5) else False
-        txtnames = filter(filter_func, recap_txtnames)
+        txtnames = sorted(list(filter(filter_func, recap_txtnames)))
 
         native_tarp = native_data_dir / tarname
         native_tarfp = tarfile.open(native_tarp, mode="r", encoding="utf-8")
