@@ -12,7 +12,7 @@ MIN_PORT=${4:-23333}
 MAX_PORT=${5:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
-OUTPUT_DIR=$HOME/outputs/Taisu2/debugg
+OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_0.1M_train
 if [ ! -d $OUTPUT_DIR ]; then
     mkdir -p $OUTPUT_DIR
 fi
@@ -28,8 +28,8 @@ echo "communication port of master node: ${MASTER_PORT}" 2>&1 | tee --append $OU
 printf "\n"
 
 
-source $HOME/.bashrc
-source $HOME/depends/anaconda3/etc/profile.d/conda.sh
+source $HOME/.bashrc  # for bash 4.2 (CentOS 7)
+source $HOME/depends/anaconda3/etc/profile.d/conda.sh  # for bash 5.1 (Ubuntu 22.04)
 conda activate
 cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
