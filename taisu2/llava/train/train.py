@@ -951,7 +951,7 @@ class DataCollatorForWebDataset(object):
             batch_labels = []
             for labels in native_labels:
                 pad_labels = torch.full(
-                                        (max_input_len - input_ids.shape[0], ), 
+                                        (max_input_len - labels.shape[0], ), 
                                         IGNORE_INDEX, 
                                         dtype=labels.dtype, 
                                         device=labels.device

@@ -13,22 +13,27 @@ MAX_PORT=${5:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
 OUTPUT_DIR=$HOME/outputs/Taisu2/debugg
-OUTPUT_FILE=${OUTPUT_DIR}/"output.log"
+if [ ! -d $OUTPUT_DIR ]; then
+    mkdir -p $OUTPUT_DIR
+fi
+
+OUTPUT_FILE=${OUTPUT_DIR}/output.log
 OUTPUT_NAME=`echo ${OUTPUT_DIR} | rev | cut -d"/" -f1-1 | rev`
 
-echo "multi-node deepspeed host file: ${HOST_FILE}"
-echo "total multi-node number: ${NNODES}"
-echo "current node rank index: ${NODE_RANK}"
-echo "master node address: ${MASTER_ADDR}"
-echo "communication port of master node: ${MASTER_PORT}"
+echo "multi-node deepspeed host file: ${HOST_FILE}" 2>&1 | tee $OUTPUT_FILE
+echo "total multi-node number: ${NNODES}" 2>&1 | tee --append $OUTPUT_FILE
+echo "current node rank index: ${NODE_RANK}" 2>&1 | tee --append $OUTPUT_FILE
+echo "master node address: ${MASTER_ADDR}" 2>&1 | tee --append $OUTPUT_FILE
+echo "communication port of master node: ${MASTER_PORT}" 2>&1 | tee --append $OUTPUT_FILE
 printf "\n"
 
 
 source $HOME/.bashrc
-conda activate xiaobao12
+source $HOME/depends/anaconda3/etc/profile.d/conda.sh
+conda activate
 cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
-echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee ${OUTPUT_FILE}
+echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee --append ${OUTPUT_FILE}
 
 deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
@@ -62,21 +67,21 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --padding_side right \
           --return_tensors "" \
           --return_attention_mask false \
-          --wds_shards_folder image-alttext-total-1.00M-at-2025-04-16-21:10:39 \
-          --wds_shards_subfolder rename_and_rearchive \
-          --wds_nsamples_per_epoch 787991 \
+          --wds_shards_folder image-alttext-total-0.10M-at-2025-04-16-18:34:43 \
+          --wds_shards_subfolder rename_and_rearchive 1th_recaption \
+          --wds_nsamples_per_epoch 112021 \
           --wds_last_batch true \
           --wds_shuffle_seed 42 \
           --wds_worker_drop_last false \
           --txts_separator "\n" \
           --per_device_train_batch_size 4 \
           --gradient_accumulation_steps 1 \
-          --num_train_epochs 1.0 \
+          --num_train_epochs 2.0 \
           --max_steps -1 \
-          --lr_scheduler_type linear \
-          --learning_rate 5e-5 \
-          --weight_decay 0 \
-          --warmup_ratio 0.0 \
+          --lr_scheduler_type cosine \
+          --learning_rate 4e-5 \
+          --weight_decay 0.1 \
+          --warmup_ratio 0.1 \
           --output_dir ${OUTPUT_DIR} \
           --cache_dir "" \
           --wandb_project "Taisu2" \
@@ -110,7 +115,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --lora_dropout 0.05 \
           --lora_weight_path "" \
           --lora_bias none \
-          --group_by_modality_length false \ 2>&1 | tee ${OUTPUT_FILE}
+          --group_by_modality_length false 2>&1 | tee --append ${OUTPUT_FILE}
 
 end_time_stamp=`date +%Y-%m-%d-%H:%M:%S`
-echo "End Taisu2 image-alttext pairs recaption (model train) at ${end_time_stamp}" 2>&1 | tee ${OUTPUT_FILE}
+echo "End Taisu2 image-alttext pairs recaption (model train) at ${end_time_stamp}" 2>&1 | tee --append ${OUTPUT_FILE}
