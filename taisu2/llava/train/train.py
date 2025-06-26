@@ -92,7 +92,7 @@ class DataArguments:
     return_attention_mask: Optional[bool] = field(default=None)
     # data arguments for webdataset
     wds_shards_folder: Optional[str] = field(default=None)
-    wds_shards_subfolder: Optional[str] = field(default="rename_and_rearchive")
+    wds_shards_subfolder: Optional[List[str]] = field(default_factory=lambda: ["rename_and_rearchive"])
     wds_nsamples_per_epoch: Optional[int] = field(default=None)
     wds_last_batch: Optional[bool] = field(default=True)
     wds_shuffle_seed: Optional[int] = field(default=42)
@@ -1007,7 +1007,11 @@ def make_wds_data_module(
                         ) -> Dict:
     """Make training and evaluation webdataset iterable for pretraining & supervised fine-tuning"""
     data_root_dir = pathlib.Path(os.getenv("HOME", "")) / "datasets" / "Taisu2_datasets"
-    wds_shards_p = data_root_dir / f"{data_args.wds_shards_folder}" / f"{data_args.wds_shards_subfolder}" / "image-text-pairs"
+    if len(data_args.wds_shards_subfolder) == 1:
+        wds_shards_subfolder = data_args.wds_shards_subfolder[0]
+    else:
+        wds_shards_subfolder = "/".join(data_args.wds_shards_subfolder).strip("/")
+    wds_shards_p = data_root_dir / f"{data_args.wds_shards_folder}" / f"{wds_shards_subfolder}" / "image-text-pairs"
     if not wds_shards_p.exists():
         raise FileNotFoundError(f"sharded tar files directory - {wds_shards_p}, does not exist!")
 
