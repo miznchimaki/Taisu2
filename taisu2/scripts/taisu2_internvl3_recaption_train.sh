@@ -30,7 +30,7 @@ printf "\n"
 
 source $HOME/.bashrc  # for bash 4.2 (CentOS 7)
 source $HOME/depends/anaconda3/etc/profile.d/conda.sh  # for bash 5.1 (Ubuntu 22.04)
-conda activate
+conda activate xiaobao12
 cd $HOME/projects/Taisu2/taisu2/
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee --append ${OUTPUT_FILE}
@@ -81,7 +81,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --lr_scheduler_type cosine \
           --learning_rate 4e-5 \
           --weight_decay 0.1 \
-          --warmup_ratio 0.1 \
+          --warmup_ratio 0.01 \
           --output_dir ${OUTPUT_DIR} \
           --cache_dir "" \
           --wandb_project "Taisu2" \
