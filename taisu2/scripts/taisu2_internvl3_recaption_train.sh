@@ -90,7 +90,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --tf32 true \
           --save_total_limit 1 \
           --save_steps 2000 \
-          --report_to "none" \
+          --report_to "wandb" \
           --logging_steps 1 \
           --optim adamw_torch \
           --adam_beta1 0.9 \
