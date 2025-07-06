@@ -1,0 +1,23 @@
+{
+    "model": {
+        "InternVL-2B-baseline": {
+            "class": "InternVLChat",
+            "model_path": "/home/lizongshu/ckpts/InternVL3-2B",
+            "load_in_8bit": false,
+            "use_mpo_prompt": false,
+            "version": "V2.0",
+            "screen_parse": true,
+            "best_of_n": 1,
+            "use_lmdeploy": false,
+            "use_postprocess": false,
+            "conv_template_str": "internvl2_5"
+        }
+    },
+    "data": {
+        "MME-RealWorld-CN": {
+            "class": "MMERealWorld",
+            "dataset": "MME-RealWorld-CN",
+            "local_data_dir": "/home/lizongshu/datasets/MME-RealWorld-Base64"
+        }
+    }
+}
