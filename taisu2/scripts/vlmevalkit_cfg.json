@@ -18,6 +18,16 @@
             "class": "MMERealWorld",
             "dataset": "MME-RealWorld-CN",
             "local_data_dir": "/home/lizongshu/datasets/MME-RealWorld-Base64"
+        },
+        "MMBench_DEV_CN": {
+            "class": "ImageMCQDataset",
+            "dataset": "MMBench_DEV_CN",
+            "local_data_dir": "/home/lizongshu/datasets/MMBench"
+        },
+        "MMBench_DEV_CN_V11": {
+            "class": "ImageMCQDataset",
+            "dataset": "MMBench_DEV_CN_V11",
+            "local_data_dir": "/home/lizongshu/datasets/MMBench"
         }
     }
 }
