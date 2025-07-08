@@ -1,6 +1,6 @@
 {
     "model": {
-        "InternVL-2B-baseline": {
+        "InternVL3-2B-baseline": {
             "class": "InternVLChat",
             "model_path": "/home/lizongshu/ckpts/InternVL3-2B",
             "load_in_8bit": false,
