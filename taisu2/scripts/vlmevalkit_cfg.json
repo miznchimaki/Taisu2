@@ -28,6 +28,31 @@
             "class": "ImageMCQDataset",
             "dataset": "MMBench_DEV_CN_V11",
             "local_data_dir": "/home/lizongshu/datasets/MMBench"
+        },
+        "CCBench": {
+            "class": "ImageMCQDataset",
+            "dataset": "CCBench",
+            "local_data_dir": "/home/lizongshu/datasets/CCBench"
+        },
+        "CMMMU_VAL": {
+            "class": "CMMMU",
+            "dataset": "CMMMU_VAL",
+            "local_data_dir": "/home/lizongshu/datasets/CMMMU"
+        },
+        "CMMU_VAL_MCQ": {
+            "class": "ImageMCQDataset",
+            "dataset": "CMMU_VAL_MCQ",
+            "local_data_dir": "/home/lizongshu/datasets/CMMU_MCQ"
+        },
+        "mmmb_cn": {
+            "class": "ImageMCQDataset",
+            "dataset": "mmmb_cn",
+            "local_data_dir": "/home/lizongshu/datasets/MMMB"
+        },
+        "mmbench_dev_cn": {
+            "class": "ImageMCQDataset",
+            "dataset": "mmbench_dev_cn",
+            "local_data_dir": "/home/lizongshu/datasets/MTL_MMBench"
         }
     }
 }
