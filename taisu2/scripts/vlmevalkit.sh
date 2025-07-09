@@ -28,8 +28,10 @@ MASTER_PORT=${8:-"32233"}
 NPROC_PER_NODE=${9:-"1"}
 NODE_RANK=${10:-"0"}
 DEVICES=${11:-"7"}
+TIMEOUT=${12:-"18000"}
 
 export CUDA_VISIBLE_DEVICES=${DEVICES}
+export DIST_TIMEOUT=${TIMEOUT}
 EVAL_CMD=(
     torchrun --nnodes ${NNODES}
     --node-rank ${NODE_RANK}
