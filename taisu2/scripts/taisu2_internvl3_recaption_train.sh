@@ -8,11 +8,13 @@ HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/ds_hostfile"}
 MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
 NNODES=$(cat $HOST_FILE | wc -l)
 NODE_RANK=${3:-0}
-MIN_PORT=${4:-23333}
-MAX_PORT=${5:-45678}
+RANDOM=${4:-42}
+MIN_PORT=${5:-23333}
+MAX_PORT=${6:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
-OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_0.1M_train
+OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_1e-1M_train_lr_1e-6_epochs_1_max_subimg_num_12
+# OUTPUT_DIR=$HOME/outputs/Taisu2/probe_2nodes
 if [ ! -d $OUTPUT_DIR ]; then
     mkdir -p $OUTPUT_DIR
 fi
@@ -30,12 +32,13 @@ printf "\n"
 
 source $HOME/.bashrc  # for bash 4.2 (CentOS 7)
 source $HOME/depends/anaconda3/etc/profile.d/conda.sh  # for bash 5.1 (Ubuntu 22.04)
-conda activate xiaobao12
+conda activate
 cd $HOME/projects/Taisu2/taisu2/
+# export WANDB_MODE=offline
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee --append ${OUTPUT_FILE}
 
-deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
+deepspeed --hostfile ${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --master_addr=${MASTER_ADDR} --master_port=${MASTER_PORT} \
           ./llava/train/train_mem.py --deepspeed ./scripts/zero3.json \
           --accelerator_config ./scripts/accelerator_cfg.json \
@@ -61,7 +64,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --dynamic_resolution true \
           --base_img_size 448 \
           --min_subimg_num 1 \
-          --max_subimg_num 9 \
+          --max_subimg_num 12 \
           --use_thumbnail true \
           --padding do_not_pad \
           --padding_side right \
@@ -74,14 +77,14 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_shuffle_seed 42 \
           --wds_worker_drop_last false \
           --txts_separator "\n" \
-          --per_device_train_batch_size 4 \
-          --gradient_accumulation_steps 1 \
-          --num_train_epochs 2.0 \
+          --per_device_train_batch_size 2 \
+          --gradient_accumulation_steps 2 \
+          --num_train_epochs 1.0 \
           --max_steps -1 \
           --lr_scheduler_type cosine \
-          --learning_rate 4e-5 \
+          --learning_rate 1e-6 \
           --weight_decay 0.1 \
-          --warmup_ratio 0.01 \
+          --warmup_ratio 0.1 \
           --output_dir ${OUTPUT_DIR} \
           --cache_dir "" \
           --wandb_project "Taisu2" \
@@ -89,7 +92,7 @@ deepspeed --hostfile=${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --bf16 true \
           --tf32 true \
           --save_total_limit 1 \
-          --save_steps 2000 \
+          --save_steps 3000 \
           --report_to "wandb" \
           --logging_steps 1 \
           --optim adamw_torch \
