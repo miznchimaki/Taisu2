@@ -13,8 +13,8 @@ MIN_PORT=${5:-23333}
 MAX_PORT=${6:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
-OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_1e-1M_train_lr_1e-6_epochs_1_max_subimg_num_12
-# OUTPUT_DIR=$HOME/outputs/Taisu2/probe_2nodes
+# OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_1e-1M_train_lr_1e-6_epochs_1_max_subimg_num_12
+OUTPUT_DIR=$HOME/outputs/Taisu2/probe_1nodes
 if [ ! -d $OUTPUT_DIR ]; then
     mkdir -p $OUTPUT_DIR
 fi
@@ -34,7 +34,7 @@ source $HOME/.bashrc  # for bash 4.2 (CentOS 7)
 source $HOME/depends/anaconda3/etc/profile.d/conda.sh  # for bash 5.1 (Ubuntu 22.04)
 conda activate
 cd $HOME/projects/Taisu2/taisu2/
-# export WANDB_MODE=offline
+export WANDB_MODE=offline
 start_time_stamp=$(date +%Y-%m-%d-%H:%M:%S)
 echo "Begin Taisu2 image-alttext pairs recaption (model train) at ${start_time_stamp}" 2>&1 | tee --append ${OUTPUT_FILE}
 
@@ -79,7 +79,7 @@ deepspeed --hostfile ${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --txts_separator "\n" \
           --per_device_train_batch_size 2 \
           --gradient_accumulation_steps 2 \
-          --num_train_epochs 1.0 \
+          --num_train_epochs 100.0 \
           --max_steps -1 \
           --lr_scheduler_type cosine \
           --learning_rate 1e-6 \

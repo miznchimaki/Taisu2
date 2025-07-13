@@ -1,10 +1,11 @@
 import argparse
 from argparse import Namespace
 import math
-import os
+import os, sys
 import shutil
 import json
 from datetime import timedelta
+import random
 from tqdm import tqdm
 from functools import partial
 from typing import Union, Tuple, TypedDict, List
@@ -26,6 +27,22 @@ from llava.model import InternVLChatModel
 from llava.multifile_tariterators import tarfile_to_samples
 from llava.taisu2_preprocess import taisu2_wds_map
 from llava.train import DataCollatorForWebDataset
+
+
+def set_random_seed(seed: str):
+    if seed.lower() != "none":
+        try:
+            random_seed = int(seed)
+        except ValueError as _:
+            print(f"get the value of random seed argument: {random_seed}, but expect an interger or a float number")
+            sys.exit(1)
+        print(f"set random seed for Python3 random, torch (cpu & cuda) to: {random_seed}")
+        random.seed(random_seed)
+        torch.manual_seed(random_seed)
+        torch.cuda.manual_seed(random_seed)
+        torch.cuda.manual_seed_all(random_seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def init_distributed(args: Namespace = None):
@@ -203,12 +220,12 @@ def create_dataloader(
 
 
 @torch.inference_mode()
-def recaption(
-              tokenizer: transformers.PreTrainedTokenizer, 
-              model: transformers.PreTrainedModel, 
-              data_loader: DataLoader, 
-              args: Namespace = None
-             ):
+def recaption_vqa_mcq(
+                      tokenizer: transformers.PreTrainedTokenizer, 
+                      model: transformers.PreTrainedModel, 
+                      data_loader: DataLoader, 
+                      args: Namespace = None
+                     ):
     eos_token_id = tokenizer.convert_tokens_to_ids(args.conversation.sep.strip())
     generation_cfg = dict()
     if args.max_new_tokens is not None:
@@ -310,7 +327,10 @@ def parse_args():
             return str(x)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--recaption-idx", type=int, default=None, help="recaption iteration index")
+    parser.add_argument("--data-type-weight", type=int, nargs="+", default=[3, 3, 4], 
+                        help="absolute values of ratios among recaption, VQA, and MCQ data")
+    parser.add_argument("--random-seed", type=str, default=None, 
+                        help="random seed for python internal random module, torch (cpu & cuda)")
     parser.add_argument("--conv-template-name", type=str, default=None, help="conversation template name")
     parser.add_argument("--local-rank", "--local_rank", dest="local_rank", type=int, default=None, 
                         help="remained argument for distribution")
@@ -372,11 +392,14 @@ def parse_args():
     parser.add_argument("--output-logits", type=eval_arg, default=False, help="whether or not to return unprocessed logit scores")
 
     args = parser.parse_args()
+    w1, w2, w3 = args.data_type_weight[0], args.data_type_weight[1], args.data_type_weight[2]
+    args.out_folder = "recaption_{recaption}_vqa_{vqa}_mcq_{mcq}_random_seed_{random_seed}".format(recaption=w1, vqa=w2, mcq=w3, random_seed=args.random_seed)
     return args
 
 
 if __name__ == "__main__":
     args = parse_args()
+    set_random_seed(args.random_seed)
     init_distributed(args=args)
     set_conv_tempalte(args=args)
 
@@ -384,7 +407,7 @@ if __name__ == "__main__":
     tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
     data_loader = create_dataloader(tokenizer, args=args)
 
-    recaption(tokenizer, model, data_loader, args=args)
+    recaption_vqa_mcq(tokenizer, model, data_loader, args=args)
     if int(args.rank) == 0:
         args_save(args=args)
         recaption_res_aggregation(args=args)
