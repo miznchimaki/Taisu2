@@ -67,7 +67,7 @@ def init_distributed(args: Namespace = None):
     return
 
 
-def set_conv_tempalte(args: Namespace = None):
+def set_conv_template(args: Namespace = None):
     if args.conv_template_name is None:
         if int(args.rank) == 0:
             print(f"conversation template name is None, set conversation tempalte to the default one")
@@ -147,7 +147,7 @@ def create_dataloader(
                       args: Namespace = None
                      ) -> DataLoader:
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
-    output_dir = root_dir / args.tars_folder / args.tars_subfolder / f"{args.recaption_idx}th_recaption"
+    output_dir = root_dir / args.tars_folder / args.tars_subfolder / args.out_folder
     if int(args.rank) == 0:
         if output_dir.exists():
             shutil.rmtree(output_dir)
@@ -252,7 +252,7 @@ def recaption_vqa_mcq(
     )
     generation_cfg.update(remained_cfg)
     recaption_res = dict() # per rank recaption result
-    recaption_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption_rank_{args.rank}.json"
+    recaption_p = Path(args.output_dir) / f"data_synthesis_rank_{args.rank}.json"
     recaption_p.unlink(missing_ok=True)
 
     for batch_idx, batch_data in enumerate(tqdm(data_loader, 
@@ -296,24 +296,24 @@ def args_save(args: Namespace = None):
     return
 
 
-def recaption_res_aggregation(args: Namespace = None):
+def synthesis_res_aggregation(args: Namespace = None):
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
-    output_dir = root_dir / args.tars_folder / args.tars_subfolder / f"{args.recaption_idx}th_recaption"
+    output_dir = root_dir / args.tars_folder / args.tars_subfolder / args.out_folder
     assert output_dir.exists(), f"recaption result directory: {output_dir} does not exist!"
     args.output_dir = str(output_dir)
-    all_recaption_res = {}
-    path_generator = Path(args.output_dir).glob("*th_recaption_rank_*.json")
+    all_synthesis_res = {}
+    path_generator = Path(args.output_dir).glob("data_synthesis_rank_*.json")
     while True:
         try:
-            recaption_res_p = next(path_generator)
-            with open(recaption_res_p, mode="r", encoding="utf-8") as recaption_res_fp:
-                recaption_res = json.load(recaption_res_fp)
-                all_recaption_res.update(recaption_res)
+            synthesis_res_p = next(path_generator)
+            with open(synthesis_res_p, mode="r", encoding="utf-8") as synthesis_res_fp:
+                synthesis_res = json.load(synthesis_res_fp)
+                all_synthesis_res.update(synthesis_res)
         except StopIteration as _:
             break
-    all_recaption_res_p = Path(args.output_dir) / f"{args.recaption_idx}th_recaption.json"
-    with open(all_recaption_res_p, mode="w", encoding="utf-8") as res_fp:
-        json.dump(all_recaption_res, res_fp, ensure_ascii=False)
+    all_synthesis_res_p = Path(args.output_dir) / f"data_synthesis.json"
+    with open(all_synthesis_res_p, mode="w", encoding="utf-8") as res_fp:
+        json.dump(all_synthesis_res, res_fp, ensure_ascii=False)
 
     return
 
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     args = parse_args()
     set_random_seed(args.random_seed)
     init_distributed(args=args)
-    set_conv_tempalte(args=args)
+    set_conv_template(args=args)
 
     tokenizer_and_model = create_tokenizer_and_model(args=args)
     tokenizer = tokenizer_and_model["tokenizer"]; model = tokenizer_and_model["model"]
@@ -410,4 +410,4 @@ if __name__ == "__main__":
     recaption_vqa_mcq(tokenizer, model, data_loader, args=args)
     if int(args.rank) == 0:
         args_save(args=args)
-        recaption_res_aggregation(args=args)
+        synthesis_res_aggregation(args=args)
