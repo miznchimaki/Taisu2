@@ -261,11 +261,17 @@ def rename_and_rearchive_generator(native_data_dir: PosixPath, native_datanum: i
     datanum_all_workers.append(datanum_last_tar_worker)
     if sum(tarnum_all_workers) != new_tars_num:
         worker_to_tar_num = {str(idx): str(tar_num) for idx, tar_num in enumerate(tarnum_all_workers)}
-        raise ValueError(f"after splitting renamed and rearchived tar files for all workers, the total number of renamed and rearchived tar files should be "
-                         f"{new_tars_num}, but get {sum(tarnum_all_workers)}, details: {worker_to_tar_num}")
+        raise ValueError(
+            "after splitting renamed and rearchived tar files for all workers, "
+            "the total number of renamed and rearchived tar files should be "
+            f"{new_tars_num}, but get {sum(tarnum_all_workers)}, details: {worker_to_tar_num}"
+        )
     if sum(datanum_all_workers) != native_datanum:
-        raise ValueError(f"after splitting renamed and rearchived tar files for all workers, the total number of renamed and rearchived data number "
-                         f"should be equal to the native one `{native_datanum}`, but get {sum(datanum_all_workers)}")
+        raise ValueError(
+            "after splitting renamed and rearchived tar files for all workers, "
+            "the total number of renamed and rearchived data number should be equal to "
+            f"the native one `{native_datanum}`, but get {sum(datanum_all_workers)}"
+        )
     for worker_idx, (tar_per_worker, data_per_worker) in enumerate(zip(tarnum_all_workers, datanum_all_workers)):
         if math.ceil(data_per_worker / datanum_per_tar) != tar_per_worker:
             raise ValueError(f"for the {worker_idx}th worker, it handles {data_per_worker} image-alttext pairs, but {tar_per_worker} tar files "
@@ -313,7 +319,10 @@ def rename_and_rearchive_task_func(iter_params: Tuple[str, str, int, int], args:
 
     if len(iter_params) != 4:
         with proc_lock:
-            logger.error(f"for each sub-process, parameters number got from the iterable parameter of process pool's map method should be 4")
+            logger.error(
+                "for each sub-process, parameters number got from the iterable "
+                "parameter of process pool's map method should be 4"
+            )
         sys.exit(1)
 
     st_native_imgname = iter_params[0]
@@ -443,11 +452,16 @@ def main():
     global logger, date_fmt
     st_time = datetime.now()
     # start renaming and rearchiving image-alttext data of Taisu2
-    logger.info(f"start renaming and rearchiving of pre-processed Taisu2 image-alttext pairs at {datetime.strftime(st_time, date_fmt)}")
+    logger.info(
+        "start renaming and rearchiving of pre-processed Taisu2 "
+        f"image-alttext pairs at {datetime.strftime(st_time, date_fmt)}"
+    )
     if args.max_workers > math.floor(args.native_data_num / args.data_num_per_tar):
         tmp_tars_num = math.floor(args.native_data_num / args.data_num_per_tar)
-        logger.warning(f"new tar files number: {tmp_tars_num} or {tmp_tars_num + 1}, but maximum workers: {args.max_workers}, "
-                       f"hence set maximum workers to {tmp_tars_num}")
+        logger.warning(
+            f"new tar files number: {tmp_tars_num} or {tmp_tars_num + 1}, but maximum workers: {args.max_workers}, "
+            f"hence set maximum workers to {tmp_tars_num}"
+        )
         args.max_workers = tmp_tars_num
     with multiprocessing.Manager() as proc_manager:
         global pid_to_rank, proc_lock, proc_barrier
