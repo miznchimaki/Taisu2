@@ -123,7 +123,10 @@ def tars_path_generator(native_data_dir: PosixPath, native_tar_num: int, max_wor
             elif len(tars_list) < tarnum_per_worker:
                 tars_list.append(next(tars_generator))
             else:  # error situation (length greater than `tarnum_per_worker`)
-                raise ValueError(f"the length of generated tar files list {len(tars_list)} is greater than predefined max value {tarnum_per_worker}")
+                raise ValueError(
+                    f"the length of generated tar files list {len(tars_list)} "
+                    f"is greater than predefined max value {tarnum_per_worker}"
+                )
         except StopIteration as _:
             break
     if tars_list:
@@ -154,8 +157,10 @@ def get_native_data_num(native_data_dir: PosixPath = None, args: Namespace = Non
     global logger
     native_tars_generator = tars_path_generator(native_data_dir, args.native_tar_num, args.max_workers_for_data_num)
     if args.max_workers_for_data_num > args.native_tar_num:
-        logger.warning(f"native tar files number for renaming and rearchiving: {args.native_tar_num}; maximum workers for "
-                       f"counting data number: {args.max_workers_for_data_num}, hence set workers number to {args.native_tar_num}")
+        logger.warning(
+            f"native tar files number for renaming and rearchiving: {args.native_tar_num}; maximum workers for "
+            f"counting data number: {args.max_workers_for_data_num}, hence set workers number to {args.native_tar_num}"
+        )
         args.max_workers_for_data_num = args.native_tar_num
     shared_data_num = multiprocessing.Value("i")
     shared_lock = multiprocessing.Lock()
@@ -382,7 +387,10 @@ def rename_and_rearchive_task_func(iter_params: Tuple[str, str, int, int], args:
                     try:
                         cur_native_tar_p = next(native_tars_generator)
                         with proc_lock:
-                            logger.info(f"process with rank {proc_rank} rearchive native tar file {cur_native_tar_p.name} into new tar file {cur_newtar_name}")
+                            logger.info(
+                                f"process with rank {proc_rank} rearchive native tar file "
+                                f"{cur_native_tar_p.name} into new tar file {cur_newtar_name}"
+                            )
                     except StopIteration as _:
                         cur_native_tar_p = None
                         if cur_native_tar_fp is not None:
@@ -394,18 +402,25 @@ def rename_and_rearchive_task_func(iter_params: Tuple[str, str, int, int], args:
                     cur_native_tar_fp = tarfile.open(cur_native_tar_p, mode="r", encoding="utf-8")
                     cur_native_imgnames = (mem_name for mem_name in cur_native_tar_fp.getnames() if mem_name.endswith(".jpg"))
         with proc_lock:
-            logger.info(f"process with rank {proc_rank} ends renaming and rearchiving this new tar file: {cur_newtar_name}, "
-                        f"and rearchive {cur_newtar_imgnum} image-alttext pairs in total")
+            logger.info(
+                f"process with rank {proc_rank} ends renaming and rearchiving this new tar file: {cur_newtar_name}, "
+                f"and rearchive {cur_newtar_imgnum} image-alttext pairs in total"
+            )
         newtar_num -= 1
         cur_newtar_name = f"{int(int(cur_newtar_name.split('.')[0]) + 1):05d}.tar"
         cur_newtar_imgnum = 0
     if added_imgnum != imgnum:
         with proc_lock:
-            logger.error(f"process with rank {proc_rank} should extract then add {imgnum} image-alttext pairs data, "
-                         f"but it handled {added_imgnum}, which is wrong")
+            logger.error(
+                f"process with rank {proc_rank} should extract then add {imgnum} image-alttext pairs data, "
+                f"but it handled {added_imgnum}, which is wrong"
+            )
     else:
         with proc_lock:
-            logger.info(f"process with rank {proc_rank} has finished renaming and rearchiving all tars and images dispendid to it, {added_imgnum} in total")
+            logger.info(
+                f"process with rank {proc_rank} has finished renaming and rearchiving all tars and images "
+                f"dispendid to it, {added_imgnum} in total"
+            )
     if cur_native_tar_fp is not None:
         cur_native_tar_fp.close()
     proc_barrier.wait()
@@ -442,19 +457,21 @@ def main():
 
         partial_task_func = partial(rename_and_rearchive_task_func, args=vars(args))
         generator_func = rename_and_rearchive_generator(
-                                                        native_data_dir=args.taisu2_specific_dir, 
-                                                        native_datanum=args.native_data_num, 
-                                                        datanum_per_tar=args.data_num_per_tar, 
-                                                        num_workers=args.max_workers
-                                                       )
+            native_data_dir=args.taisu2_specific_dir, 
+            native_datanum=args.native_data_num, 
+            datanum_per_tar=args.data_num_per_tar, 
+            num_workers=args.max_workers
+        )
         with futures.ProcessPoolExecutor(args.max_workers, initializer=proc_init_func) as mp_exec:
             _ = mp_exec.map(partial_task_func, generator_func, chunksize=1)
         gc.collect()
 
     ed_time = datetime.now()
     whole_secs = (ed_time - st_time).total_seconds()
-    logger.info(f"end renaming and rearchiving of pre-processed Taisu2 image-alttext pairs at {datetime.strftime(ed_time, date_fmt)}, and has spent "
-                f"{whole_secs / 60:.3f} minutes in total")
+    logger.info(
+        "end renaming and rearchiving of pre-processed Taisu2 image-alttext pairs at "
+        f"{datetime.strftime(ed_time, date_fmt)}, and has spent {whole_secs / 60:.3f} minutes in total"
+    )
 
     # command line arguments saving
     args_save_p = args.taisu2_output_dir / "arguments.json"

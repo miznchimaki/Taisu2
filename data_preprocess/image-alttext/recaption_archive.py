@@ -106,12 +106,12 @@ def args_check_and_log(args: Namespace = None):
 
 
 def single_tartxt_info(
-                       tar_p: PosixPath, 
-                       shared_lock: AcquirerProxy, 
-                       tartxt_dict: DictProxy, 
-                       shared_tarnum: Synchronized, 
-                       shared_txtnum: Synchronized
-                      ):
+    tar_p: PosixPath, 
+    shared_lock: AcquirerProxy, 
+    tartxt_dict: DictProxy, 
+    shared_tarnum: Synchronized, 
+    shared_txtnum: Synchronized
+):
     tarname = tar_p.name
     with tarfile.open(tar_p, mode="r", encoding="utf-8") as tar_fp:
         txtnames = [mem_name for mem_name in tar_fp.getnames() if mem_name.endswith(".txt")]
@@ -131,19 +131,19 @@ def get_tartxt_info_task_func(tar_p: PosixPath, data_type: str = "native"):
     if data_type == "native":
         global native_tartxt_dict, shared_native_tarnum, shared_native_txtnum
         single_tartxt_info(
-                           tar_p=tar_p, shared_lock=tartxt_info_lock, 
-                           tartxt_dict=native_tartxt_dict, 
-                           shared_tarnum=shared_native_tarnum, 
-                           shared_txtnum=shared_native_txtnum
-                          )
+            tar_p=tar_p, shared_lock=tartxt_info_lock, 
+            tartxt_dict=native_tartxt_dict, 
+            shared_tarnum=shared_native_tarnum, 
+            shared_txtnum=shared_native_txtnum
+        )
     else:
         global recap_tartxt_dict, shared_recap_tarnum, shared_recap_txtnum
         single_tartxt_info(
-                           tar_p=tar_p, shared_lock=tartxt_info_lock, 
-                           tartxt_dict=recap_tartxt_dict, 
-                           shared_tarnum=shared_recap_tarnum, 
-                           shared_txtnum=shared_recap_txtnum
-                          )
+            tar_p=tar_p, shared_lock=tartxt_info_lock, 
+            tartxt_dict=recap_tartxt_dict, 
+            shared_tarnum=shared_recap_tarnum, 
+            shared_txtnum=shared_recap_txtnum
+        )
     return
 
 
@@ -245,7 +245,10 @@ def recaption_archive_task_func(tarnames: List[str], args: Dict = None):
 
     proc_st_time = datetime.now()
     with proc_lock:
-        logger.info(f"process with rank {proc_rank} begins to handle all tar files dispendided to it at {datetime.strftime(proc_st_time, date_fmt_str)}")
+        logger.info(
+            f"process with rank {proc_rank} begins to handle all tar files dispendided to "
+            f"it at {datetime.strftime(proc_st_time, date_fmt_str)}"
+        )
     tarnum = 0
     datanum = 0
     for tarname in tarnames:
@@ -310,10 +313,16 @@ def main():
     get_tartxt_info(tars_dir=args.recap_txt_dir, max_workers=args.tarread_workers, data_type="recap", args=args)
 
     if args.native_tarnum != args.recap_tarnum:
-        logger.error(f"tar files number isn't equal between before and after recaption, before: {args.native_tarnum}; after: {args.recap_tarnum}")
+        logger.error(
+            "tar files number isn't equal between before and after recaption, "
+            f"before: {args.native_tarnum}; after: {args.recap_tarnum}"
+        )
         sys.exit(1)
     if args.native_txtnum != args.recap_txtnum:
-        logger.error(f"image-alttext pairs number isn't equal between before and after recaption, before: {args.native_txtnum}; after: {args.recap_txtnum}")
+        logger.error(
+            "image-alttext pairs number isn't equal between before and after recaption, "
+            f"before: {args.native_txtnum}; after: {args.recap_txtnum}"
+        )
         sys.exit(1)
 
     global native_tarnames, recap_tarnames

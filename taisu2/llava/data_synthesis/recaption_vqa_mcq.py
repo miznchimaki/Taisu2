@@ -94,12 +94,12 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModel:
     mpt_flag = "mpt" in model_name_or_path
     internvl_flag = "internvl2_5" in model_name_or_path.lower() or "internvl3" in model_name_or_path.lower()
     tokenizer = AutoTokenizer.from_pretrained(
-                                              model_name_or_path, 
-                                              use_fast=args.use_fast, 
-                                              trust_remote_code=args.trust_remote_code, 
-                                              model_max_length=args.model_max_length, 
-                                              padding_side=args.padding_side if not mpt_flag else "right", 
-                                             )
+        model_name_or_path, 
+        use_fast=args.use_fast, 
+        trust_remote_code=args.trust_remote_code, 
+        model_max_length=args.model_max_length, 
+        padding_side=args.padding_side if not mpt_flag else "right", 
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.unk_token
         tokenizer.pad_token_id = tokenizer.unk_token_id
@@ -111,35 +111,32 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModel:
             if args.mpt_attn_impl is not None:
                 config.attn_config["attn_impl"] = args.mpt_attn_impl
             model = LlavaMptForCausalLM.from_pretrained(
-                                                        model_name_or_path, 
-                                                        config=config, 
-                                                        cache_dir=args.cache_dir, 
-                                                       ).to(device=cuda_device_str)
+                model_name_or_path, 
+                config=config, 
+                cache_dir=args.cache_dir, 
+            ).to(device=cuda_device_str)
         else:
             model = LlavaLlamaForCausalLM.from_pretrained(
-                                                          model_name_or_path, 
-                                                          cache_dir=args.cache_dir, 
-                                                          torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
-                                                          attn_implementation="flash_attention_2" if args.use_flash_attn else None, 
-                                                         ).to(device=cuda_device_str)
+                model_name_or_path, 
+                cache_dir=args.cache_dir, 
+                torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
+                attn_implementation="flash_attention_2" if args.use_flash_attn else None, 
+            ).to(device=cuda_device_str)
     else:
         img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
         model = InternVLChatModel.from_pretrained(
-                                                  model_name_or_path, 
-                                                  cache_dir=args.cache_dir, 
-                                                  trust_remote_code=args.trust_remote_code, 
-                                                  use_flash_attn=args.use_flash_attn, 
-                                                  torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
-                                                 ).to(device=cuda_device_str)
+            model_name_or_path, 
+            cache_dir=args.cache_dir, 
+            trust_remote_code=args.trust_remote_code, 
+            use_flash_attn=args.use_flash_attn, 
+            torch_dtype=torch.bfloat16 if args.data_type == "bfloat16" else (torch.float16 if args.data_type == "float16" else torch.float32), 
+        ).to(device=cuda_device_str)
         model.img_context_token_id = img_context_token_id
         args.context_token_per_img = model.num_image_token
     model = model.eval()
     model.config.use_cache = False
 
-    return dict(
-                tokenizer=tokenizer, 
-                model=model
-               )
+    return dict(tokenizer=tokenizer, model=model)
 
 
 def data_worker_init(worker_id: int):
@@ -147,9 +144,9 @@ def data_worker_init(worker_id: int):
 
 
 def create_dataloader(
-                      tokenizer: transformers.PreTrainedTokenizer, 
-                      args: Namespace = None
-                     ) -> DataLoader:
+    tokenizer: transformers.PreTrainedTokenizer, 
+    args: Namespace = None
+) -> DataLoader:
     root_dir = Path(os.getenv("HOME", None)) / "datasets" / "Taisu2_datasets"
     output_dir = root_dir / args.tars_folder / args.tars_subfolder / args.out_folder
     if int(args.rank) == 0:
@@ -179,12 +176,12 @@ def create_dataloader(
     if args.wds_shuffle_seed is not None:
         wds_pipeline.append(wds.detshuffle(bufsize=SAMPLE_SHUFFLE_BUFSIZE, initial=SAMPLE_SHUFFLE_INITIAL, seed=args.wds_shuffle_seed))
     recaption_map_func = partial(
-                                 taisu2_wds_map, 
-                                 is_train=False, 
-                                 inference_recaption=True, 
-                                 tokenizer=tokenizer, 
-                                 data_args=args
-                                )
+        taisu2_wds_map, 
+        is_train=False, 
+        inference_recaption=True, 
+        tokenizer=tokenizer, 
+        data_args=args
+    )
     wds_pipeline.append(wds.map(recaption_map_func))
     recaption_wds = wds.DataPipeline(*wds_pipeline)
 
@@ -201,21 +198,21 @@ def create_dataloader(
     recaption_wds.with_length(n=total_samples_per_rank, silent=True)
 
     recaption_data_collator = DataCollatorForWebDataset(
-                                                        tokenizer=tokenizer, 
-                                                        pad_token_id=tokenizer.pad_token_id, 
-                                                        conv_name=args.conv_template_name, 
-                                                        is_train=False
-                                                       )
+        tokenizer=tokenizer, 
+        pad_token_id=tokenizer.pad_token_id, 
+        conv_name=args.conv_template_name, 
+        is_train=False
+    )
 
     data_loader = DataLoader(
-                             recaption_wds, 
-                             batch_size=args.batch_size, 
-                             shuffle=False, 
-                             num_workers=args.num_workers, 
-                             collate_fn=recaption_data_collator, 
-                             pin_memory=args.pin_memory, 
-                             drop_last=args.drop_last
-                            )
+        recaption_wds, 
+        batch_size=args.batch_size, 
+        shuffle=False, 
+        num_workers=args.num_workers, 
+        collate_fn=recaption_data_collator, 
+        pin_memory=args.pin_memory, 
+        drop_last=args.drop_last
+    )
     batch_num_per_rank = math.ceil(total_samples_per_rank / args.batch_size)
     total_batch_num = batch_num_per_rank * int(args.world_size)
     args.total_batch_num = total_batch_num
@@ -225,11 +222,11 @@ def create_dataloader(
 
 @torch.inference_mode()
 def recaption_vqa_mcq(
-                      tokenizer: transformers.PreTrainedTokenizer, 
-                      model: transformers.PreTrainedModel, 
-                      data_loader: DataLoader, 
-                      args: Namespace = None
-                     ):
+    tokenizer: transformers.PreTrainedTokenizer, 
+    model: transformers.PreTrainedModel, 
+    data_loader: DataLoader, 
+    args: Namespace = None
+):
     eos_token_id = tokenizer.convert_tokens_to_ids(args.conversation.sep.strip())
     generation_cfg = dict()
     if args.max_new_tokens is not None:
@@ -261,21 +258,23 @@ def recaption_vqa_mcq(
 
     data_type_weights = args.data_type_weights
     data_type_ids = list(range(len(data_type_weights)))
-    for batch_idx, batch_data in enumerate(tqdm(data_loader, 
-                                                desc="recaption_vqa_mcq", 
-                                                total=args.batch_num_per_rank + 5, 
-                                                disable=int(args.rank) != 0, 
-                                                dynamic_ncols=True)):
+    for batch_idx, batch_data in enumerate(tqdm(
+        data_loader, 
+        desc="recaption_vqa_mcq", 
+        total=args.batch_num_per_rank + 5, 
+        disable=int(args.rank) != 0, 
+        dynamic_ncols=True
+    )):
         pixel_values: torch.Tensor = batch_data["pixel_values"].to(dtype=model.dtype, device=model.device)
         input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
         attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
         data_names: List[str] = batch_data["data_names"]
         batch_synthesis_data: Union[torch.Tensor | ModelOutput] = model.generate(
-                                                                                 pixel_values=pixel_values, 
-                                                                                 input_ids=input_ids, 
-                                                                                 attention_mask=attention_mask, 
-                                                                                 **generation_cfg
-                                                                                )
+            pixel_values=pixel_values, 
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            **generation_cfg
+        )
         if args.return_dict_in_generate:
             data_synthesis_strs = tokenizer.batch_decode(batch_synthesis_data["sequences"], skip_special_tokens=True)
         else:
