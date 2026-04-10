@@ -56,7 +56,7 @@ cd $HOME/projects/Taisu2/taisu2/
 
 data_synthesis_cmd=(
 deepspeed --include localhost:${GPU_DEVICES} --master_port ${MASTER_PORT}
-          ./llava/inference/recaption_vqa_mcq.py --data-type-weight ${DATA_TYPE_WEIGHT}
+          ./llava/inference/recaption_vqa_mcq.py --data-type-weights ${DATA_TYPE_WEIGHT}
                                                  --random-seed ${DATA_WEIGHT_RANDOM_SEED}
                                                  --conv-template-name internvl2_5
                                                  --num-workers ${DATALOADER_WORKERS}

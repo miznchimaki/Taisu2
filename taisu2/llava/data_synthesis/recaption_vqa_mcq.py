@@ -142,6 +142,10 @@ def create_tokenizer_and_model(args: Namespace = None) -> TokenizerAndModel:
                )
 
 
+def data_worker_init(worker_id: int):
+    pass
+
+
 def create_dataloader(
                       tokenizer: transformers.PreTrainedTokenizer, 
                       args: Namespace = None
@@ -232,7 +236,7 @@ def recaption_vqa_mcq(
         generation_cfg.update({"max_new_tokens": args.max_new_tokens})
     elif args.max_length is not None:
         generation_cfg.update({"max_length": args.max_length})
-    remained_cfg = dict(
+    other_cfg = dict(
         pad_token_id=eos_token_id, 
         eos_token_id=eos_token_id, 
         min_length=args.min_length, 
@@ -250,13 +254,15 @@ def recaption_vqa_mcq(
         output_scores=args.output_scores, 
         output_logits=args.output_logits, 
     )
-    generation_cfg.update(remained_cfg)
-    recaption_res = dict() # per rank recaption result
-    recaption_p = Path(args.output_dir) / f"data_synthesis_rank_{args.rank}.json"
-    recaption_p.unlink(missing_ok=True)
+    generation_cfg.update(other_cfg)
+    synthesis_res = dict() # per rank data synthesis (detailed caption, vqa, mcq) result
+    synthesis_p = Path(args.output_dir) / f"data_synthesis_rank_{args.rank}.json"
+    synthesis_p.unlink(missing_ok=True)
 
+    data_type_weights = args.data_type_weights
+    data_type_ids = list(range(len(data_type_weights)))
     for batch_idx, batch_data in enumerate(tqdm(data_loader, 
-                                                desc=f"{args.recaption_idx}th_recaption", 
+                                                desc="recaption_vqa_mcq", 
                                                 total=args.batch_num_per_rank + 5, 
                                                 disable=int(args.rank) != 0, 
                                                 dynamic_ncols=True)):
@@ -264,25 +270,28 @@ def recaption_vqa_mcq(
         input_ids: torch.LongTensor = batch_data["input_ids"].to(device=model.device)
         attention_mask: torch.LongTensor = batch_data["attention_mask"].to(device=model.device)
         data_names: List[str] = batch_data["data_names"]
-        batch_recaption: Union[torch.Tensor | ModelOutput] = model.generate(
-                                                                            pixel_values=pixel_values, 
-                                                                            input_ids=input_ids, 
-                                                                            attention_mask=attention_mask, 
-                                                                            **generation_cfg
-                                                                           )
+        batch_synthesis_data: Union[torch.Tensor | ModelOutput] = model.generate(
+                                                                                 pixel_values=pixel_values, 
+                                                                                 input_ids=input_ids, 
+                                                                                 attention_mask=attention_mask, 
+                                                                                 **generation_cfg
+                                                                                )
         if args.return_dict_in_generate:
-            recaption_strs = tokenizer.batch_decode(batch_recaption["sequences"], skip_special_tokens=True)
+            data_synthesis_strs = tokenizer.batch_decode(batch_synthesis_data["sequences"], skip_special_tokens=True)
         else:
-            recaption_strs = tokenizer.batch_decode(batch_recaption, skip_special_tokens=True)
-        if len(data_names) != len(recaption_strs):
+            data_synthesis_strs = tokenizer.batch_decode(batch_synthesis_data, skip_special_tokens=True)
+        if len(data_names) != len(data_synthesis_strs):
             raise ValueError(f"the {batch_idx}th batch on process with rank {args.rank} encounter a length inequality "
-                             f"between input data_names({len(data_names)}) and outupt recaption strings ({len(recaption_strs)})!")
-        for data_name, recaption_str in zip(data_names, recaption_strs):
-            recaption_res.update({data_name: recaption_str})
+                             f"between input data_names({len(data_names)}) and outupt recaption strings ({len(data_synthesis_strs)})!")
+        # TODO: Now here
+        # TODO: 这里需要针对生成数据的不同类型进行处理,就是将不同的生成数据使用不同的模板进行规范化
+        # TODO: 所以除了data_name, dataset (wds)/dataloader还要返回一个data_type, data_type目前的取值为(caption/recaption, vqa, mcq)
+        for data_name, data_synthesis_str in zip(data_names, data_synthesis_strs):
+            synthesis_res.update({data_name: data_synthesis_str})
 
-    with open(recaption_p, mode="w", encoding="utf-8") as recaption_fp:
-        json.dump(recaption_res, recaption_fp, ensure_ascii=False)
-    print(f"process with rank {args.rank} has completed recaption results saving, into {recaption_p}")
+    with open(synthesis_p, mode="w", encoding="utf-8") as recaption_fp:
+        json.dump(synthesis_res, recaption_fp, ensure_ascii=False)
+    print(f"process with rank {args.rank} has completed recaption results saving, into {synthesis_p}")
     deepspeed.comm.barrier()
     return
 
@@ -327,7 +336,7 @@ def parse_args():
             return str(x)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-type-weight", type=int, nargs="+", default=[3, 3, 4], 
+    parser.add_argument("--data-type-weights", type=int, nargs="+", default=[3, 3, 4], 
                         help="absolute values of ratios among recaption, VQA, and MCQ data")
     parser.add_argument("--random-seed", type=str, default=None, 
                         help="random seed for python internal random module, torch (cpu & cuda)")
@@ -392,7 +401,7 @@ def parse_args():
     parser.add_argument("--output-logits", type=eval_arg, default=False, help="whether or not to return unprocessed logit scores")
 
     args = parser.parse_args()
-    w1, w2, w3 = args.data_type_weight[0], args.data_type_weight[1], args.data_type_weight[2]
+    w1, w2, w3 = args.data_type_weights[0], args.data_type_weights[1], args.data_type_weights[2]
     args.out_folder = "recaption_{recaption}_vqa_{vqa}_mcq_{mcq}_random_seed_{random_seed}".format(recaption=w1, vqa=w2, mcq=w3, random_seed=args.random_seed)
     return args
 

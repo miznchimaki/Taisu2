@@ -3,6 +3,7 @@ import random
 from typing import Union, List, Tuple, Dict, Set
 from functools import partial
 from pathlib import Path, PosixPath
+from argparse import Namespace
 import llava.conversation as conversation_lib
 from llava.conversation import default_conversation
 from llava.constants import IMG_START_TOKEN, IMG_CONTEXT_TOKEN, IMG_END_TOKEN
@@ -17,7 +18,7 @@ import transformers
 
 
 TASKS_TYPE = (
-              "caption", "visual_grounding", "ocr", 
+              "caption", "visual_grounding", "ocr", "mcq", 
               "visual_reasoning", "vqa", "multi_image", "text"
              )
 
@@ -344,7 +345,7 @@ def taisu2_wds_map(
                    is_train: bool = True, 
                    inference_recaption: bool = False, 
                    tokenizer: transformers.PreTrainedTokenizer = None, 
-                   data_args = None
+                   data_args: Namespace = None
                   ):
     no_img = "jpg" not in wds_sample and "jpeg" not in wds_sample and "png" not in wds_sample
     no_txt = "txt" not in wds_sample; no_json = "json" not in wds_sample

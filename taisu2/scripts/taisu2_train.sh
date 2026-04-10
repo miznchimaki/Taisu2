@@ -4,7 +4,7 @@
 # turn off the execution trace mode
 set +x
 
-HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/ds_hostfile"}
+HOST_FILE=${1:-"$HOME/projects/Taisu2/taisu2/scripts/multinode_hostfile"}
 MASTER_ADDR=${2:-$(cat $HOST_FILE | head -n 1 | cut -d" " -f 1)}
 NNODES=$(cat $HOST_FILE | wc -l)
 NODE_RANK=${3:-0}
@@ -14,7 +14,7 @@ MAX_PORT=${6:-45678}
 PORT_RANGE=$((MAX_PORT - MIN_PORT + 1))
 MASTER_PORT=$((RANDOM % PORT_RANGE + MIN_PORT))
 # OUTPUT_DIR=$HOME/outputs/Taisu2/1th_recaption_1e-1M_train_lr_1e-6_epochs_1_max_subimg_num_12
-OUTPUT_DIR=$HOME/outputs/Taisu2/probe_1nodes
+OUTPUT_DIR=$HOME/outputs/Taisu2/probe_2nodes
 if [ ! -d $OUTPUT_DIR ]; then
     mkdir -p $OUTPUT_DIR
 fi
@@ -78,8 +78,8 @@ deepspeed --hostfile ${HOST_FILE} --no_ssh --node_rank=${NODE_RANK} \
           --wds_worker_drop_last false \
           --txts_separator "\n" \
           --per_device_train_batch_size 2 \
-          --gradient_accumulation_steps 2 \
-          --num_train_epochs 100.0 \
+          --gradient_accumulation_steps 4 \
+          --num_train_epochs 80.0 \
           --max_steps -1 \
           --lr_scheduler_type cosine \
           --learning_rate 1e-6 \
