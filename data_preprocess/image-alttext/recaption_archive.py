@@ -294,9 +294,11 @@ def recaption_archive_task_func(tarnames: List[str], args: Dict = None):
     proc_ed_time = datetime.now()
     proc_elapsed_secs = (proc_ed_time - proc_st_time).total_seconds()
     with proc_lock:
-        logger.info(f"process with rank {proc_rank} ends handling all tar files dispendided to it at {datetime.strftime(proc_ed_time, date_fmt_str)}, "
-                    f"takes {(proc_elapsed_secs / 60):.3f} minutes in total, has completed {tarnum} tar files and {datanum} "
-                    f"image-alttext pairs in total")
+        logger.info(
+            f"process with rank {proc_rank} ends handling all tar files dispendided to it at {datetime.strftime(proc_ed_time, date_fmt_str)}, "
+            f"takes {(proc_elapsed_secs / 60):.3f} minutes in total, has completed {tarnum} tar files and {datanum} "
+            f"image-alttext pairs in total"
+        )
 
     return
 
