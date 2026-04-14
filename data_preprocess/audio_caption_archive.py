@@ -101,6 +101,7 @@ def archive_func(
     data_num_per_tar: int = None,
     tar_num_list: List[int] = None,
 ):
+    global logger, proc_lock, proc_barrier
     # single process initialization
     proc_rank = int(os.getenv('RANK', 0))
     data_idx = 0
@@ -158,22 +159,24 @@ def archive_func(
                         matched_id = matched_ids[0]
                         audio_caption: str = anno_captions[matched_id]
                     else:
-                        logger.warning(
-                            f'On process  with rank {proc_rank}, get a raw audio with path - '
-                            f'{raw_audio_p}, which doesn\'t have '
-                            f'matched annotation in the csv file - {anno_path}'
-                        )
+                        with proc_lock:
+                            logger.warning(
+                                f'On process  with rank {proc_rank}, get a raw audio with path - '
+                                f'{raw_audio_p}, which doesn\'t have '
+                                f'matched annotation in the csv file - {anno_path}'
+                            )
                         continue
                 if json_anno:
                     try:
                         matched_id = anno_names.index(raw_audio_stem)
                         audio_caption: str = anno_captions[matched_id]
                     except ValueError as _:
-                        logger.warning(
-                            f'On process with rank {proc_rank}, get a raw_audio with path - '
-                            f'{raw_audio_p}, which doesn\'t have '
-                            f'matched annotation in the json file - {anno_path}'
-                        )
+                        with proc_lock:
+                            logger.warning(
+                                f'On process with rank {proc_rank}, get a raw_audio with path - '
+                                f'{raw_audio_p}, which doesn\'t have '
+                                f'matched annotation in the json file - {anno_path}'
+                            )
                         continue
 
                 data_stem = f'{data_idx:05d}'
@@ -201,6 +204,11 @@ def archive_func(
                 tar_fp.addfile(audio_tarinfo, io.BytesIO(audio_bytes))
                 tar_fp.addfile(caption_tarinfo, io.BytesIO(caption_bytes))
                 data_idx += 1
+        with proc_lock:
+            logger.info(
+                f'process with rank {proc_rank} has archived a tar file whose name is {tar_idx:05d} successfully; '
+                f'{data_idx + 1} audio-caption pairs are archived into this tar.'
+            )
         if data_idx == data_num_per_tar:
             tar_idx += 1
             data_idx = 0
@@ -208,6 +216,7 @@ def archive_func(
 
 def main():
     args = parse_args()
+    init_logger(args.log_level)
     # element for per worker: (audio/caption file path idx, data item start idx)
     archive_indices = []
     global total_audio_num
