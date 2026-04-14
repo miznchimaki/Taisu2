@@ -34,8 +34,28 @@ total_audio_num = 0
 
 def parse_args():
     parser = argparse.ArgumentParser(description='archive multi audio-caption dataset into a whole webdataset-format dataset')
-    parser.add_argument('--audio-dir', nargs='+', default=[], type=str, help='raw audio files directories')
-    parser.add_argument('--anno-path', nargs='+', default=[], type=str, help='paths of annotation files holding audio captions')
+    parser.add_argument('--audio-dir', nargs='+', default=[
+        '/home/lizongshu/datasets/AudioSetCaps/AudioSet',
+        '/home/lizongshu/datasets/AudioSetCaps/YouTube-8M',
+        '/home/lizongshu/datasets/Auto-ACD/train',
+        '/home/lizongshu/datasets/Clotho/development',
+        '/home/lizongshu/datasets/Sound-VECaps/Sound-VECaps_audio',
+        '/home/lizongshu/datasets/WavCaps/Zip_files/AudioSet_SL',
+        '/home/lizongshu/datasets/WavCaps/Zip_files/BBC_Sound_Effects',
+        '/home/lizongshu/datasets/WavCaps/Zip_files/FreeSound',
+        '/home/lizongshu/datasets/WavCaps/Zip_files/SoundBible',
+    ], type=str, help='raw audio files directories')
+    parser.add_argument('--anno-path', nargs='+', default=[
+        '/home/lizongshu/datasets/AudioSetCaps/AudioSetCaps_caption.csv',
+        '/home/lizongshu/datasets/AudioSetCaps/YouTube-8M_AudioSetCaps_caption.csv',
+        '/home/lizongshu/datasets/Auto-ACD/train.csv',
+        '/home/lizongshu/datasets/Clotho/clotho_captions_development.csv',
+        '/home/lizongshu/datasets/Sound-VECaps/Sound-VECaps_audio.csv',
+        '/home/lizongshu/datasets/WavCaps/json_files/AudioSet_SL/as_final.json',
+        '/home/lizongshu/datasets/WavCaps/json_files/BBC_Sound_Effects/bbc_final.json',
+        '/home/lizongshu/datasets/WavCaps/json_files/FreeSound/fsd_final.json',
+        '/home/lizongshu/datasets/WavCaps/json_files/SoundBible/sb_final.json',
+    ], type=str, help='paths of annotation files holding audio captions')
     parser.add_argument('--output-dir', default=None, type=str, help='final resulted wds-format dataset directory')
     parser.add_argument('--num-workers', default=8, type=int, help='number of parallel workers to archive audio-caption pairs')
     parser.add_argument('--data-num-per-tar', default=10000, type=int, help='number of audio-caption pairs in each archived tar file')
